@@ -3,7 +3,10 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ozel_ders_takip/data/local/app_database.dart';
 import 'package:ozel_ders_takip/data/providers/repositories_provider.dart';
+import 'package:ozel_ders_takip/features/settings/profile_screen.dart';
 import 'package:ozel_ders_takip/features/students/widgets/student_book_resource_dialog.dart';
+import 'package:ozel_ders_takip/shared/constants/curriculum_folders.dart';
+import 'package:ozel_ders_takip/shared/constants/student_grade_levels.dart';
 import 'package:ozel_ders_takip/shared/i18n/strings_tr.dart';
 import 'package:ozel_ders_takip/shared/theme/app_theme.dart';
 import 'package:ozel_ders_takip/shared/models/homework_assignment.dart';
@@ -55,7 +58,7 @@ List<String> buildHomeworkSummaryLines(
     final item = e.value;
     final numbered = '${e.key + 1}. ${item.line}';
     if (item.note.isEmpty) return numbered;
-    return '$numbered\n   ${item.note}';
+    return '$numbered\n${item.note}';
   }).toList();
 }
 
@@ -96,7 +99,7 @@ List<String> buildResourceHomeworkLines(
     final numbered = '${e.key + 1}. $resource: ${entry.topic}';
     final note = entry.note.trim();
     if (note.isEmpty) return numbered;
-    return '$numbered\n   $note';
+    return '$numbered\n$note';
   }).toList();
 }
 
@@ -109,6 +112,7 @@ class LessonHomeworkFields extends ConsumerStatefulWidget {
     required this.homeworkController,
     required this.resourceController,
     this.compact = false,
+    this.showTaughtTopics = true,
     this.onFormatTopic,
     this.onFormatHomework,
     this.onFormatResource,
@@ -119,6 +123,8 @@ class LessonHomeworkFields extends ConsumerStatefulWidget {
   final TextEditingController homeworkController;
   final TextEditingController resourceController;
   final bool compact;
+  /// false ise yalnızca ödev / kaynak seçimi gösterilir.
+  final bool showTaughtTopics;
   final VoidCallback? onFormatTopic;
   final VoidCallback? onFormatHomework;
   final VoidCallback? onFormatResource;
@@ -137,8 +143,10 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
   List<String> _practiceResources = [];
   /// konu anlatımlı kaynak → seçili konular + açıklama
   final Map<String, List<HomeworkTopicEntry>> _resourceTopics = {};
-  /// deneme kaynak → deneme no (null = boş)
-  final Map<String, int?> _denemeNumbers = {};
+  /// deneme kaynak → seçili deneme noları
+  final Map<String, Set<int>> _denemeSelections = {};
+  /// Daha önce ödev olarak verilmiş deneme noları (yeşil gösterim)
+  final Map<String, Set<int>> _previouslyAssignedDenemes = {};
   bool _loadingResources = true;
 
   @override
@@ -154,9 +162,14 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
     final assignments =
         parseHomeworkResourceAssignments(widget.resourceController.text);
     _resourceTopics.clear();
+    _denemeSelections.clear();
     for (final a in assignments) {
       if (a.isPractice) {
-        _denemeNumbers[a.resource] = a.denemeNo;
+        if (a.denemeNo != null) {
+          _denemeSelections
+              .putIfAbsent(a.resource, () => <int>{})
+              .add(a.denemeNo!);
+        }
       } else if (a.topicEntries.isNotEmpty) {
         _resourceTopics[a.resource] = a.topicEntries
             .map(
@@ -188,22 +201,31 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
       ..clear()
       ..addAll(remappedTopics);
 
-    final remappedDenemes = <String, int?>{};
-    for (final entry in _denemeNumbers.entries) {
+    final remappedDenemes = <String, Set<int>>{};
+    for (final entry in _denemeSelections.entries) {
       final key = _matchResourceName(entry.key, _practiceResources) ?? entry.key;
-      remappedDenemes[key] = entry.value;
+      remappedDenemes.putIfAbsent(key, () => <int>{}).addAll(entry.value);
     }
-    _denemeNumbers
+    _denemeSelections
       ..clear()
       ..addAll(remappedDenemes);
 
     for (final name in _practiceResources) {
-      _denemeNumbers.putIfAbsent(name, () => null);
+      _denemeSelections.putIfAbsent(name, () => <int>{});
     }
+
+    // Artık listede olmayan kaynak anahtarlarını temizle
+    _denemeSelections.removeWhere(
+      (k, _) =>
+          _matchResourceName(k, _practiceResources) == null &&
+          !_practiceResources.contains(k),
+    );
 
     final assignedNames = [
       ..._resourceTopics.keys,
-      ..._denemeNumbers.entries.where((e) => e.value != null).map((e) => e.key),
+      ..._denemeSelections.entries
+          .where((e) => e.value.isNotEmpty)
+          .map((e) => e.key),
     ];
     if (assignedNames.isNotEmpty &&
         assignedNames.every((n) => !known.contains(n))) {
@@ -215,6 +237,9 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
     try {
       final student =
           await ref.read(studentsRepoProvider).getStudentById(widget.studentId);
+      final previous = await ref
+          .read(homeworkRepoProvider)
+          .getAssignedDenemeNumbers(widget.studentId);
       if (!mounted) return;
       final topicList = parseStudentBookResources(student?.bookResource);
       final practiceList =
@@ -222,6 +247,14 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
       setState(() {
         _topicResources = topicList;
         _practiceResources = practiceList;
+        _previouslyAssignedDenemes.clear();
+        for (final entry in previous.entries) {
+          final key =
+              _matchResourceName(entry.key, practiceList) ?? entry.key;
+          _previouslyAssignedDenemes
+              .putIfAbsent(key, () => <int>{})
+              .addAll(entry.value);
+        }
         _loadingResources = false;
         _reconcileResourceKeys();
         _syncResourceController();
@@ -240,7 +273,7 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
   void _syncResourceController() {
     final items = collectHomeworkResourceAssignments(
       resourceTopics: _resourceTopics,
-      denemeNumbers: _denemeNumbers,
+      denemeSelections: _denemeSelections,
     );
     widget.resourceController.text = joinHomeworkResourceAssignments(items);
   }
@@ -249,7 +282,7 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
     if (_customHomework) return;
     final items = collectHomeworkResourceAssignments(
       resourceTopics: _resourceTopics,
-      denemeNumbers: _denemeNumbers,
+      denemeSelections: _denemeSelections,
     );
     widget.homeworkController.text = formatHomeworkSummary(
       items,
@@ -265,16 +298,20 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
   List<HomeworkResourceAssignment> get _homeworkAssignments =>
       collectHomeworkResourceAssignments(
         resourceTopics: _resourceTopics,
-        denemeNumbers: _denemeNumbers,
+        denemeSelections: _denemeSelections,
       );
 
   bool get _hasHomeworkAssignments => _homeworkAssignments.isNotEmpty;
 
   Future<void> _addTaughtTopicFromSystem() async {
+    final student =
+        await ref.read(studentsRepoProvider).getStudentById(widget.studentId);
+    if (!mounted) return;
     final picked = await showCurriculumMultiTopicPicker(
       context,
       ref,
       initiallySelected: _taughtTopics,
+      gradeLevel: student?.gradeLevel,
     );
     if (picked == null || !mounted) return;
     setState(() {
@@ -330,9 +367,10 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
       _customResource = false;
       widget.resourceController.clear();
       _resourceTopics.clear();
-      _denemeNumbers.removeWhere((k, _) => !_practiceResources.contains(k));
+      _denemeSelections
+          .removeWhere((k, _) => !_practiceResources.contains(k));
       for (final name in _practiceResources) {
-        _denemeNumbers[name] = null;
+        _denemeSelections.putIfAbsent(name, () => <int>{}).clear();
       }
     });
     _syncResourceController();
@@ -342,6 +380,9 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
   Future<void> _assignTopicsToResource(String resource) async {
     final current =
         List<HomeworkTopicEntry>.from(_resourceTopics[resource] ?? const []);
+    final student =
+        await ref.read(studentsRepoProvider).getStudentById(widget.studentId);
+    if (!mounted) return;
     final selected = await showModalBottomSheet<List<HomeworkTopicEntry>>(
       context: context,
       isScrollControlled: true,
@@ -353,6 +394,7 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
         resourceName: resource,
         taughtTopics: _taughtTopics,
         initiallySelected: current,
+        gradeLevel: student?.gradeLevel,
       ),
     );
     if (selected == null || !mounted) return;
@@ -368,22 +410,24 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
   }
 
   Future<void> _pickDenemeNumber(String resource) async {
-    final current = _denemeNumbers[resource];
-    final picked = await showModalBottomSheet<int>(
+    final current = Set<int>.from(_denemeSelections[resource] ?? const {});
+    final previously =
+        _previouslyAssignedDenemes[resource] ?? const <int>{};
+    final picked = await showModalBottomSheet<Set<int>>(
       context: context,
+      isScrollControlled: true,
       backgroundColor: AppColors.surface,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => _DenemeNumberSheet(initial: current),
+      builder: (ctx) => _DenemeNumberSheet(
+        initial: current,
+        previouslyAssigned: previously,
+      ),
     );
     if (picked == null || !mounted) return;
     setState(() {
-      if (picked < 0) {
-        _denemeNumbers[resource] = null;
-      } else {
-        _denemeNumbers[resource] = picked;
-      }
+      _denemeSelections[resource] = picked;
     });
     _syncResourceController();
     _syncHomeworkSummary();
@@ -450,32 +494,50 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
 
   Widget _numberedHomeworkText(String line, {double fontSize = 13}) {
     final parts = line.split('\n');
+    final first = parts.first.trimLeft();
+    final match = RegExp(r'^(\d+\.\s*)(.*)$').firstMatch(first);
+    final bullet = match?.group(1) ?? '';
+    final body = (match?.group(2) ?? first).trimLeft();
+    final notes = parts
+        .skip(1)
+        .map((e) => e.trim())
+        .where((e) => e.isNotEmpty)
+        .toList();
+
+    final bodyStyle = TextStyle(
+      fontSize: fontSize,
+      height: 1.35,
+      color: AppColors.textPrimary,
+    );
+    final bulletStyle = bodyStyle.copyWith(fontWeight: FontWeight.w600);
+
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Column(
+      child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            parts.first,
-            style: TextStyle(
-              fontSize: fontSize,
-              height: 1.35,
-              color: AppColors.textPrimary,
+          if (bullet.isNotEmpty) Text(bullet, style: bulletStyle),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(body, style: bodyStyle),
+                for (final note in notes)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2),
+                    child: Text(
+                      note,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        height: 1.35,
+                        color: AppColors.muted,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
-          if (parts.length > 1)
-            Padding(
-              padding: const EdgeInsets.only(left: 16, top: 2),
-              child: Text(
-                parts.sublist(1).join('\n'),
-                style: const TextStyle(
-                  fontSize: 12,
-                  height: 1.35,
-                  color: AppColors.muted,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-            ),
         ],
       ),
     );
@@ -484,15 +546,10 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
   Widget _topicResourceCard(String name) {
     final entries = _resourceTopics[name] ?? const <HomeworkTopicEntry>[];
     final selected = entries.isNotEmpty;
-    final numberedLines = buildResourceHomeworkLines(
-      name,
-      entries,
-      taughtTopics: _taughtTopics,
-    );
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.fromLTRB(12, 10, 6, 10),
+      padding: const EdgeInsets.fromLTRB(12, 4, 6, 4),
       decoration: BoxDecoration(
         color: selected ? AppColors.primarySoft : AppColors.surfaceElevated,
         borderRadius: BorderRadius.circular(12),
@@ -502,46 +559,26 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
               : AppColors.border,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  name,
-                  style: TextStyle(
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    fontSize: 13,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-              IconButton(
-                tooltip: StringsTr.pickTopicsForResource,
-                onPressed: () => _assignTopicsToResource(name),
-                icon: Icon(
-                  Icons.add_circle,
-                  color: selected ? AppColors.primary : AppColors.muted,
-                ),
-              ),
-            ],
-          ),
-          if (numberedLines.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            ...numberedLines.map((line) => _numberedHomeworkText(line)),
-          ] else
-            const Padding(
-              padding: EdgeInsets.only(left: 2),
-              child: Text(
-                StringsTr.noTopicsAssigned,
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppColors.muted,
-                  fontStyle: FontStyle.italic,
-                ),
+          Expanded(
+            child: Text(
+              name,
+              style: TextStyle(
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                fontSize: 13,
+                color: AppColors.textPrimary,
               ),
             ),
+          ),
+          IconButton(
+            tooltip: StringsTr.pickTopicsForResource,
+            onPressed: () => _assignTopicsToResource(name),
+            icon: Icon(
+              Icons.add_circle,
+              color: selected ? AppColors.primary : AppColors.muted,
+            ),
+          ),
         ],
       ),
     );
@@ -561,10 +598,48 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
     );
   }
 
+  Widget _taughtTopicLine(int index, String topic) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceElevated,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              '${index + 1}. $topic',
+              style: const TextStyle(
+                fontSize: 13,
+                height: 1.35,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ),
+          InkWell(
+            onTap: () => _removeTaughtTopic(topic),
+            borderRadius: BorderRadius.circular(16),
+            child: const Padding(
+              padding: EdgeInsets.all(4),
+              child: Icon(Icons.close, size: 16, color: AppColors.muted),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _denemeResourceCard(String name) {
-    final no = _denemeNumbers[name];
-    final selected = no != null;
-    final numberedLine = selected ? '1. $name: Deneme $no' : null;
+    final nos = (_denemeSelections[name] ?? const <int>{}).toList()..sort();
+    final selected = nos.isNotEmpty;
+    final previous = _previouslyAssignedDenemes[name] ?? const <int>{};
+    final label = selected ? nos.join(', ') : StringsTr.denemeNumberEmpty;
+    final allPreviouslyAssigned =
+        selected && nos.every(previous.contains);
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 8),
@@ -578,50 +653,47 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
               : AppColors.border,
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  name,
-                  style: TextStyle(
-                    fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                    fontSize: 13,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
+          Expanded(
+            child: Text(
+              name,
+              style: TextStyle(
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                fontSize: 13,
+                color: AppColors.textPrimary,
               ),
-              InkWell(
-                onTap: () => _pickDenemeNumber(name),
-                borderRadius: BorderRadius.circular(10),
-                child: Container(
-                  constraints: const BoxConstraints(minWidth: 72),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: AppColors.surface,
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    no == null ? StringsTr.denemeNumberEmpty : '$no',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                      color: no == null ? AppColors.muted : AppColors.warning,
-                    ),
-                  ),
-                ),
-              ),
-            ],
+            ),
           ),
-          if (numberedLine != null) ...[
-            const SizedBox(height: 6),
-            _numberedHomeworkText(numberedLine),
-          ],
+          InkWell(
+            onTap: () => _pickDenemeNumber(name),
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              constraints: const BoxConstraints(minWidth: 72, maxWidth: 140),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: AppColors.border),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: !selected
+                      ? AppColors.muted
+                      : allPreviouslyAssigned
+                          ? AppColors.success
+                          : AppColors.warning,
+                ),
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -653,98 +725,86 @@ class _LessonHomeworkFieldsState extends ConsumerState<LessonHomeworkFields> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _sectionCard(
-          children: [
-            _centerBarTitle(
-              StringsTr.taughtTopicsLabel,
-              trailing: _customTopic
-                  ? IconButton(
-                      tooltip: StringsTr.back,
-                      onPressed: _backFromCustomTopic,
-                      icon: const Icon(Icons.arrow_back, size: 18),
-                      color: AppColors.muted,
-                      visualDensity: VisualDensity.compact,
-                    )
-                  : TextButton(
-                      onPressed: _enableCustomTopic,
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.accent,
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
+        if (widget.showTaughtTopics) ...[
+          _sectionCard(
+            children: [
+              _centerBarTitle(
+                StringsTr.taughtTopicsLabel,
+                trailing: _customTopic
+                    ? IconButton(
+                        tooltip: StringsTr.back,
+                        onPressed: _backFromCustomTopic,
+                        icon: const Icon(Icons.arrow_back, size: 18),
+                        color: AppColors.muted,
                         visualDensity: VisualDensity.compact,
-                      ),
-                      child: const Text(
-                        StringsTr.defineMyself,
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
+                      )
+                    : TextButton(
+                        onPressed: _enableCustomTopic,
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.accent,
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          visualDensity: VisualDensity.compact,
                         ),
-                      ),
-                    ),
-            ),
-            const SizedBox(height: 10),
-            if (_customTopic)
-              TextField(
-                controller: widget.topicController,
-                decoration: _decoration(
-                  label: StringsTr.curriculumTopic,
-                  hint: StringsTr.customTopicHint,
-                ),
-                minLines: 1,
-                maxLines: 4,
-                textCapitalization: TextCapitalization.sentences,
-                onChanged: (_) {
-                  _taughtTopics =
-                      parseTaughtTopics(widget.topicController.text);
-                },
-                onEditingComplete: () {
-                  _taughtTopics =
-                      parseTaughtTopics(widget.topicController.text);
-                  widget.onFormatTopic?.call();
-                },
-                onTapOutside: (_) {
-                  _taughtTopics =
-                      parseTaughtTopics(widget.topicController.text);
-                  widget.onFormatTopic?.call();
-                },
-              )
-            else ...[
-              if (_taughtTopics.isNotEmpty)
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: _taughtTopics
-                      .map(
-                        (t) => InputChip(
-                          label: Text(t, style: const TextStyle(fontSize: 12)),
-                          onDeleted: () => _removeTaughtTopic(t),
-                          deleteIconColor: AppColors.muted,
-                          backgroundColor: AppColors.primarySoft,
-                          side: BorderSide(
-                            color: AppColors.primary.withValues(alpha: 0.35),
+                        child: const Text(
+                          StringsTr.defineMyself,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
-                      )
-                      .toList(),
-                ),
-              if (_taughtTopics.isNotEmpty) const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: _addTaughtTopicFromSystem,
-                icon: const Icon(Icons.add, size: 18),
-                label: Text(
-                  _taughtTopics.isEmpty
-                      ? StringsTr.pickTopicFromSystem
-                      : StringsTr.addTopicAction,
-                ),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 44),
-                  foregroundColor: AppColors.textPrimary,
-                  side: const BorderSide(color: AppColors.border),
-                ),
+                      ),
               ),
+              const SizedBox(height: 10),
+              if (_customTopic)
+                TextField(
+                  controller: widget.topicController,
+                  decoration: _decoration(
+                    label: StringsTr.curriculumTopic,
+                    hint: StringsTr.customTopicHint,
+                  ),
+                  minLines: 1,
+                  maxLines: 4,
+                  textCapitalization: TextCapitalization.sentences,
+                  onChanged: (_) {
+                    _taughtTopics =
+                        parseTaughtTopics(widget.topicController.text);
+                  },
+                  onEditingComplete: () {
+                    _taughtTopics =
+                        parseTaughtTopics(widget.topicController.text);
+                    widget.onFormatTopic?.call();
+                  },
+                  onTapOutside: (_) {
+                    _taughtTopics =
+                        parseTaughtTopics(widget.topicController.text);
+                    widget.onFormatTopic?.call();
+                  },
+                )
+              else ...[
+                if (_taughtTopics.isNotEmpty)
+                  ..._taughtTopics.asMap().entries.map(
+                        (e) => _taughtTopicLine(e.key, e.value),
+                      ),
+                if (_taughtTopics.isNotEmpty) const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  onPressed: _addTaughtTopicFromSystem,
+                  icon: const Icon(Icons.add, size: 18),
+                  label: Text(
+                    _taughtTopics.isEmpty
+                        ? StringsTr.pickTopicFromSystem
+                        : StringsTr.addTopicAction,
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 44),
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.border),
+                  ),
+                ),
+              ],
             ],
-          ],
-        ),
-        SizedBox(height: gap),
+          ),
+          SizedBox(height: gap),
+        ],
         _sectionCard(
           children: [
             _centerBarTitle(
@@ -908,10 +968,27 @@ class _TurkishNoteInputFormatter extends TextInputFormatter {
   }
 }
 
-class _DenemeNumberSheet extends StatelessWidget {
-  const _DenemeNumberSheet({this.initial});
+class _DenemeNumberSheet extends StatefulWidget {
+  const _DenemeNumberSheet({
+    this.initial = const {},
+    this.previouslyAssigned = const {},
+  });
 
-  final int? initial;
+  final Set<int> initial;
+  final Set<int> previouslyAssigned;
+
+  @override
+  State<_DenemeNumberSheet> createState() => _DenemeNumberSheetState();
+}
+
+class _DenemeNumberSheetState extends State<_DenemeNumberSheet> {
+  late final Set<int> _selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _selected = Set<int>.from(widget.initial);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -930,7 +1007,7 @@ class _DenemeNumberSheet extends StatelessWidget {
             ),
             const SizedBox(height: 12),
             OutlinedButton(
-              onPressed: () => Navigator.pop(context, -1),
+              onPressed: () => setState(() => _selected.clear()),
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 44),
               ),
@@ -949,23 +1026,43 @@ class _DenemeNumberSheet extends StatelessWidget {
                 itemCount: 40,
                 itemBuilder: (context, i) {
                   final n = i + 1;
-                  final selected = initial == n;
+                  final selected = _selected.contains(n);
+                  final prior = widget.previouslyAssigned.contains(n);
+                  final Color bg;
+                  final Color fg;
+                  if (selected && prior) {
+                    bg = AppColors.successSoft;
+                    fg = AppColors.success;
+                  } else if (selected) {
+                    bg = AppColors.warningSoft;
+                    fg = AppColors.warning;
+                  } else if (prior) {
+                    bg = AppColors.successSoft;
+                    fg = AppColors.success;
+                  } else {
+                    bg = AppColors.surfaceElevated;
+                    fg = AppColors.textPrimary;
+                  }
                   return Material(
-                    color: selected
-                        ? AppColors.warningSoft
-                        : AppColors.surfaceElevated,
+                    color: bg,
                     borderRadius: BorderRadius.circular(10),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(10),
-                      onTap: () => Navigator.pop(context, n),
+                      onTap: () {
+                        setState(() {
+                          if (selected) {
+                            _selected.remove(n);
+                          } else {
+                            _selected.add(n);
+                          }
+                        });
+                      },
                       child: Center(
                         child: Text(
                           '$n',
                           style: TextStyle(
                             fontWeight: FontWeight.w700,
-                            color: selected
-                                ? AppColors.warning
-                                : AppColors.textPrimary,
+                            color: fg,
                           ),
                         ),
                       ),
@@ -973,6 +1070,14 @@ class _DenemeNumberSheet extends StatelessWidget {
                   );
                 },
               ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: () => Navigator.pop(context, Set<int>.from(_selected)),
+              style: FilledButton.styleFrom(
+                minimumSize: const Size(double.infinity, 48),
+              ),
+              child: const Text(StringsTr.ok),
             ),
           ],
         ),
@@ -986,11 +1091,13 @@ class _ResourceTopicPickSheet extends ConsumerStatefulWidget {
     required this.resourceName,
     required this.taughtTopics,
     required this.initiallySelected,
+    this.gradeLevel,
   });
 
   final String resourceName;
   final List<String> taughtTopics;
   final List<HomeworkTopicEntry> initiallySelected;
+  final String? gradeLevel;
 
   @override
   ConsumerState<_ResourceTopicPickSheet> createState() =>
@@ -1076,6 +1183,23 @@ class _ResourceTopicPickSheetState extends ConsumerState<_ResourceTopicPickSheet
     });
   }
 
+  void _applyCurriculumDelta({
+    Iterable<String> add = const [],
+    Iterable<String> remove = const [],
+  }) {
+    setState(() {
+      for (final t in remove) {
+        _selected.remove(t);
+        _removeNoteController(t);
+      }
+      for (final t in add) {
+        if (t.trim().isEmpty) continue;
+        _selected.add(t);
+        _controllerFor(t);
+      }
+    });
+  }
+
   Widget _sectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.only(top: 4, bottom: 8),
@@ -1152,7 +1276,9 @@ class _ResourceTopicPickSheetState extends ConsumerState<_ResourceTopicPickSheet
               child: _CurriculumTopicBrowser(
                 multiSelect: true,
                 onPick: _toggleTopicFromCurriculum,
+                onBulkChange: _applyCurriculumDelta,
                 selectedTopics: _selected,
+                gradeLevel: widget.gradeLevel,
               ),
             ),
             if (_selected.isNotEmpty) ...[
@@ -1245,6 +1371,7 @@ Future<List<String>?> showCurriculumMultiTopicPicker(
   BuildContext context,
   WidgetRef ref, {
   List<String> initiallySelected = const [],
+  String? gradeLevel,
 }) async {
   return showModalBottomSheet<List<String>>(
     context: context,
@@ -1255,6 +1382,7 @@ Future<List<String>?> showCurriculumMultiTopicPicker(
     ),
     builder: (ctx) => _CurriculumMultiTopicPickerSheet(
       initiallySelected: initiallySelected,
+      gradeLevel: gradeLevel,
     ),
   );
 }
@@ -1262,9 +1390,11 @@ Future<List<String>?> showCurriculumMultiTopicPicker(
 class _CurriculumMultiTopicPickerSheet extends ConsumerStatefulWidget {
   const _CurriculumMultiTopicPickerSheet({
     this.initiallySelected = const [],
+    this.gradeLevel,
   });
 
   final List<String> initiallySelected;
+  final String? gradeLevel;
 
   @override
   ConsumerState<_CurriculumMultiTopicPickerSheet> createState() =>
@@ -1289,6 +1419,16 @@ class _CurriculumMultiTopicPickerSheetState
       } else {
         _selected.add(topic);
       }
+    });
+  }
+
+  void _applyDelta({
+    Iterable<String> add = const [],
+    Iterable<String> remove = const [],
+  }) {
+    setState(() {
+      _selected.removeAll(remove);
+      _selected.addAll(add.where((e) => e.trim().isNotEmpty));
     });
   }
 
@@ -1322,12 +1462,25 @@ class _CurriculumMultiTopicPickerSheetState
               StringsTr.multiSelectTopicsHint,
               style: TextStyle(color: AppColors.muted, fontSize: 12),
             ),
+            if (widget.gradeLevel != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                StudentGradeLevels.labelFor(widget.gradeLevel) ?? '',
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             Expanded(
               child: _CurriculumTopicBrowser(
                 multiSelect: true,
                 onPick: _toggleTopic,
+                onBulkChange: _applyDelta,
                 selectedTopics: _selected,
+                gradeLevel: widget.gradeLevel,
               ),
             ),
             if (_selected.isNotEmpty) ...[
@@ -1383,17 +1536,24 @@ class _CurriculumMultiTopicPickerSheetState
   }
 }
 
-/// Parametrelerden Ders → Ünite → Konu → Kazanım gezintisi.
+/// Branş → (TYT/AYT/sınıf collapse) → ünite → konu(+checkbox) → kazanım(+checkbox).
 class _CurriculumTopicBrowser extends ConsumerStatefulWidget {
   const _CurriculumTopicBrowser({
     required this.onPick,
+    this.onBulkChange,
     this.selectedTopics = const {},
     this.multiSelect = false,
+    this.gradeLevel,
   });
 
   final void Function(String topicLabel) onPick;
+  final void Function({
+    Iterable<String> add,
+    Iterable<String> remove,
+  })? onBulkChange;
   final Set<String> selectedTopics;
   final bool multiSelect;
+  final String? gradeLevel;
 
   @override
   ConsumerState<_CurriculumTopicBrowser> createState() =>
@@ -1409,11 +1569,21 @@ class _CurriculumTopicBrowserState
   List<CurriculumUnit> _units = [];
   List<CurriculumTopic> _topics = [];
   List<CurriculumOutcome> _outcomes = [];
+  final Map<String, List<CurriculumOutcome>> _outcomesByTopic = {};
+  late Set<String> _expandedGroups;
+  late Set<String> _expandedFolders;
   bool _loading = true;
 
   @override
   void initState() {
     super.initState();
+    _expandedGroups =
+        StudentGradeLevels.defaultExpandedGroups(widget.gradeLevel);
+    final profile = ref.read(teacherProfileProvider).asData?.value;
+    final branches = profile?.branches ?? const <String>[];
+    _expandedFolders = branches.isNotEmpty
+        ? branches.toSet()
+        : (profile?.visibleFolders.toSet() ?? <String>{});
     _loadSubjects();
   }
 
@@ -1422,7 +1592,14 @@ class _CurriculumTopicBrowserState
     final list = await ref.read(curriculumRepoProvider).getSubjects();
     if (!mounted) return;
     setState(() {
-      _subjects = list;
+      _subjects = list
+          .where(
+            (s) => StudentGradeLevels.subjectMatchesGrade(
+              s.name,
+              widget.gradeLevel,
+            ),
+          )
+          .toList();
       _loading = false;
     });
   }
@@ -1437,46 +1614,120 @@ class _CurriculumTopicBrowserState
       _units = units;
       _topics = [];
       _outcomes = [];
+      _outcomesByTopic.clear();
     });
   }
 
   Future<void> _selectUnit(CurriculumUnit u) async {
     final topics = await ref.read(curriculumRepoProvider).getTopics(u.id);
+    final map = <String, List<CurriculumOutcome>>{};
+    for (final t in topics) {
+      map[t.id] = await ref.read(curriculumRepoProvider).getOutcomes(t.id);
+    }
     if (!mounted) return;
     setState(() {
       _unit = u;
       _topic = null;
       _topics = topics;
       _outcomes = [];
+      _outcomesByTopic
+        ..clear()
+        ..addAll(map);
     });
   }
 
-  Future<void> _selectTopic(CurriculumTopic t) async {
-    final outcomes = await ref.read(curriculumRepoProvider).getOutcomes(t.id);
+  Future<void> _openTopic(CurriculumTopic t) async {
+    final outcomes = _outcomesByTopic[t.id] ??
+        await ref.read(curriculumRepoProvider).getOutcomes(t.id);
     if (!mounted) return;
     if (outcomes.isEmpty) {
-      widget.onPick(t.name);
+      _toggleWholeTopic(t, outcomes);
       return;
     }
     setState(() {
       _topic = t;
       _outcomes = outcomes;
+      _outcomesByTopic[t.id] = outcomes;
     });
   }
 
-  void _selectOutcome(CurriculumOutcome o) {
-    final label = '${_topic!.name} — ${o.name}';
-    widget.onPick(label);
-  }
+  List<String> _outcomeLabels(
+    CurriculumTopic t,
+    List<CurriculumOutcome> outs,
+  ) =>
+      outs.map((o) => '${t.name} — ${o.name}').toList();
 
-  void _pickTopicOnly() {
-    if (_topic != null) widget.onPick(_topic!.name);
-  }
-
-  bool _isTopicSelected(CurriculumTopic t) {
+  bool _isWholeTopicSelected(
+    CurriculumTopic t,
+    List<CurriculumOutcome> outs,
+  ) {
     if (widget.selectedTopics.contains(t.name)) return true;
-    final prefix = '${t.name} — ';
-    return widget.selectedTopics.any((s) => s.startsWith(prefix));
+    if (outs.isEmpty) return false;
+    final labels = _outcomeLabels(t, outs);
+    return labels.every(widget.selectedTopics.contains);
+  }
+
+  bool _isOutcomeChecked(CurriculumTopic t, CurriculumOutcome o) {
+    if (widget.selectedTopics.contains(t.name)) return true;
+    return widget.selectedTopics.contains('${t.name} — ${o.name}');
+  }
+
+  void _toggleWholeTopic(CurriculumTopic t, List<CurriculumOutcome> outs) {
+    final labels = _outcomeLabels(t, outs);
+    final selected = _isWholeTopicSelected(t, outs);
+    if (widget.onBulkChange != null) {
+      if (selected) {
+        widget.onBulkChange!(
+          add: const [],
+          remove: [t.name, ...labels],
+        );
+      } else {
+        widget.onBulkChange!(
+          add: [t.name],
+          remove: labels,
+        );
+      }
+      return;
+    }
+    widget.onPick(t.name);
+  }
+
+  void _toggleOutcome(CurriculumTopic t, CurriculumOutcome o) {
+    final label = '${t.name} — ${o.name}';
+    final outs = _outcomesByTopic[t.id] ?? _outcomes;
+    final labels = _outcomeLabels(t, outs);
+    final topicSelected = widget.selectedTopics.contains(t.name);
+    final checked = _isOutcomeChecked(t, o);
+
+    if (widget.onBulkChange != null) {
+      if (checked) {
+        if (topicSelected) {
+          final keep = labels.where((l) => l != label).toList();
+          widget.onBulkChange!(
+            add: keep,
+            remove: [t.name, label],
+          );
+        } else {
+          widget.onBulkChange!(add: const [], remove: [label]);
+        }
+      } else {
+        final next = {
+          ...widget.selectedTopics.where((s) => s != t.name),
+          label,
+        };
+        final allOn = labels.every(next.contains);
+        if (allOn) {
+          widget.onBulkChange!(
+            add: [t.name],
+            remove: labels,
+          );
+        } else {
+          widget.onBulkChange!(add: [label], remove: const []);
+        }
+      }
+      return;
+    }
+    widget.onPick(label);
   }
 
   Widget _backChip() {
@@ -1491,6 +1742,7 @@ class _CurriculumTopicBrowserState
             } else if (_unit != null) {
               _unit = null;
               _topics = [];
+              _outcomesByTopic.clear();
             } else if (_subject != null) {
               _subject = null;
               _units = [];
@@ -1501,11 +1753,6 @@ class _CurriculumTopicBrowserState
         label: const Text(StringsTr.back),
       ),
     );
-  }
-
-  Widget _selectedBadge(String label) {
-    if (!widget.selectedTopics.contains(label)) return const SizedBox.shrink();
-    return const Icon(Icons.check_circle, color: AppColors.success, size: 18);
   }
 
   @override
@@ -1538,29 +1785,7 @@ class _CurriculumTopicBrowserState
   }
 
   Widget _buildList() {
-    if (_subject == null) {
-      if (_subjects.isEmpty) {
-        return const Center(
-          child: Text(
-            StringsTr.noSubjectsYet,
-            style: TextStyle(color: AppColors.muted),
-          ),
-        );
-      }
-      return ListView(
-        children: _subjects
-            .map(
-              (s) => ListTile(
-                leading:
-                    const Icon(Icons.school_outlined, color: AppColors.primary),
-                title: Text(s.name),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => _selectSubject(s),
-              ),
-            )
-            .toList(),
-      );
-    }
+    if (_subject == null) return _buildFolderSubjectTree();
     if (_unit == null) {
       if (_units.isEmpty) {
         return const Center(
@@ -1574,8 +1799,10 @@ class _CurriculumTopicBrowserState
         children: _units
             .map(
               (u) => ListTile(
-                leading:
-                    const Icon(Icons.folder_outlined, color: AppColors.accent),
+                leading: const Icon(
+                  Icons.folder_outlined,
+                  color: AppColors.accent,
+                ),
                 title: Text(u.name),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () => _selectUnit(u),
@@ -1584,114 +1811,207 @@ class _CurriculumTopicBrowserState
             .toList(),
       );
     }
-    if (_topic == null) {
-      if (_topics.isEmpty) {
-        return const Center(
-          child: Text(
-            'Bu ünitede konu yok',
-            style: TextStyle(color: AppColors.muted),
+    if (_topic == null) return _buildTopicsList();
+    return _buildOutcomesList();
+  }
+
+  Widget _buildFolderSubjectTree() {
+    if (_subjects.isEmpty) {
+      return const Center(
+        child: Text(
+          StringsTr.noSubjectsYet,
+          style: TextStyle(color: AppColors.muted),
+        ),
+      );
+    }
+    final byFolder = <String, List<CurriculumSubject>>{};
+    for (final s in _subjects) {
+      final folder =
+          (s.folder.trim().isEmpty) ? 'MATEMATİK' : s.folder.trim();
+      byFolder.putIfAbsent(folder, () => []).add(s);
+    }
+    var folders = byFolder.keys.toList()..sort(CurriculumFolders.compare);
+    final visible =
+        ref.watch(teacherProfileProvider).asData?.value.visibleFolders ??
+            const <String>[];
+    if (visible.isNotEmpty) {
+      final allow = visible.toSet();
+      folders = folders.where((f) => allow.contains(f)).toList();
+    }
+
+    return ListView(
+      children: [
+        for (final folder in folders)
+          Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              initiallyExpanded: _expandedFolders.isEmpty ||
+                  _expandedFolders.contains(folder),
+              leading: const Icon(Icons.folder, color: AppColors.primary),
+              title: Text(
+                folder,
+                style: const TextStyle(fontWeight: FontWeight.w800),
+              ),
+              children: _buildGroupedSubjects(byFolder[folder]!),
+            ),
           ),
-        );
-      }
-      return ListView(
-        children: _topics
-            .map(
-              (t) {
-                if (widget.multiSelect) {
-                  final selected = _isTopicSelected(t);
-                  return ListTile(
+      ],
+    );
+  }
+
+  List<Widget> _buildGroupedSubjects(List<CurriculumSubject> subjects) {
+    final byGroup = <String, List<CurriculumSubject>>{};
+    for (final s in subjects) {
+      final g = StudentGradeLevels.groupForSubjectName(s.name);
+      byGroup.putIfAbsent(g, () => []).add(s);
+    }
+    final widgets = <Widget>[];
+    for (final group in StudentGradeLevels.subjectGroups) {
+      final list = byGroup[group];
+      if (list == null || list.isEmpty) continue;
+      widgets.add(
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            initiallyExpanded: _expandedGroups.contains(group),
+            tilePadding: const EdgeInsets.only(left: 28, right: 12),
+            title: Text(
+              group,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                color: AppColors.muted,
+              ),
+            ),
+            children: list
+                .map(
+                  (s) => ListTile(
+                    contentPadding:
+                        const EdgeInsets.only(left: 48, right: 16),
                     leading: const Icon(
-                      Icons.menu_book_outlined,
-                      color: AppColors.warning,
+                      Icons.school_outlined,
+                      color: AppColors.primary,
+                      size: 20,
                     ),
-                    title: Text(t.name),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (selected) _selectedBadge(t.name),
-                        const Icon(Icons.chevron_right),
-                      ],
-                    ),
-                    onTap: () => _selectTopic(t),
-                  );
-                }
-                return ListTile(
-                  leading: const Icon(
-                    Icons.menu_book_outlined,
-                    color: AppColors.warning,
+                    title: Text(s.name, style: const TextStyle(fontSize: 14)),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () => _selectSubject(s),
                   ),
-                  title: Text(t.name),
-                  trailing: widget.selectedTopics.contains(t.name)
-                      ? _selectedBadge(t.name)
-                      : const Icon(Icons.chevron_right),
-                  onTap: () => _selectTopic(t),
-                );
-              },
+                )
+                .toList(),
+          ),
+        ),
+      );
+    }
+    return widgets;
+  }
+
+  Widget _buildTopicsList() {
+    if (_topics.isEmpty) {
+      return const Center(
+        child: Text(
+          'Bu ünitede konu yok',
+          style: TextStyle(color: AppColors.muted),
+        ),
+      );
+    }
+    return ListView(
+      children: _topics.map((t) {
+        final outs = _outcomesByTopic[t.id] ?? const <CurriculumOutcome>[];
+        final selected = _isWholeTopicSelected(t, outs);
+        if (!widget.multiSelect) {
+          return ListTile(
+            leading: const Icon(
+              Icons.menu_book_outlined,
+              color: AppColors.warning,
+            ),
+            title: Text(t.name),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _openTopic(t),
+          );
+        }
+        return ListTile(
+          contentPadding: const EdgeInsets.only(left: 4, right: 8),
+          leading: Checkbox(
+            value: selected,
+            onChanged: (_) => _toggleWholeTopic(t, outs),
+          ),
+          title: Text(t.name),
+          subtitle: selected
+              ? const Text(
+                  StringsTr.topicSelectAllOutcomesHint,
+                  style: TextStyle(fontSize: 11, color: AppColors.success),
+                )
+              : (outs.isEmpty
+                  ? null
+                  : Text(
+                      '${outs.length} kazanım',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.muted,
+                      ),
+                    )),
+          trailing: IconButton(
+            tooltip: 'Kazanımları aç',
+            icon: const Icon(Icons.chevron_right),
+            onPressed: () => _openTopic(t),
+          ),
+          onTap: () => _openTopic(t),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildOutcomesList() {
+    final topic = _topic!;
+    final outs = _outcomes;
+    if (!widget.multiSelect) {
+      return ListView(
+        children: outs
+            .map(
+              (o) => ListTile(
+                leading: const Icon(
+                  Icons.check_circle_outline,
+                  color: AppColors.success,
+                ),
+                title: Text(o.name),
+                onTap: () => _toggleOutcome(topic, o),
+              ),
             )
             .toList(),
       );
     }
-    if (widget.multiSelect) {
-      return Column(
-        children: [
-          CheckboxListTile(
-            dense: true,
-            contentPadding: EdgeInsets.zero,
-            value: widget.selectedTopics.contains(_topic!.name),
-            title: Text('Sadece konu: ${_topic!.name}'),
-            controlAffinity: ListTileControlAffinity.leading,
-            onChanged: (_) => _pickTopicOnly(),
-          ),
-          const Divider(),
-          Expanded(
-            child: ListView(
-              children: _outcomes
-                  .map(
-                    (o) {
-                      final label = '${_topic!.name} — ${o.name}';
-                      return CheckboxListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        value: widget.selectedTopics.contains(label),
-                        title: Text(o.name, style: const TextStyle(fontSize: 14)),
-                        controlAffinity: ListTileControlAffinity.leading,
-                        onChanged: (_) => _selectOutcome(o),
-                      );
-                    },
-                  )
-                  .toList(),
-            ),
-          ),
-        ],
-      );
-    }
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ListTile(
-          leading: const Icon(Icons.check, color: AppColors.primary),
-          title: Text('Sadece konu: ${_topic!.name}'),
-          trailing: _selectedBadge(_topic!.name),
-          onTap: _pickTopicOnly,
+        CheckboxListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          value: _isWholeTopicSelected(topic, outs),
+          title: Text(
+            topic.name,
+            style: const TextStyle(fontWeight: FontWeight.w700),
+          ),
+          subtitle: const Text(
+            StringsTr.topicSelectAllOutcomesHint,
+            style: TextStyle(fontSize: 11),
+          ),
+          controlAffinity: ListTileControlAffinity.leading,
+          onChanged: (_) => _toggleWholeTopic(topic, outs),
         ),
-        const Divider(),
+        const Divider(height: 12),
         Expanded(
           child: ListView(
-            children: _outcomes
-                .map(
-                  (o) {
-                    final label = '${_topic!.name} — ${o.name}';
-                    return ListTile(
-                      leading: const Icon(
-                        Icons.check_circle_outline,
-                        color: AppColors.success,
-                      ),
-                      title: Text(o.name),
-                      trailing: _selectedBadge(label),
-                      onTap: () => _selectOutcome(o),
-                    );
-                  },
-                )
-                .toList(),
+            children: outs.map((o) {
+              return CheckboxListTile(
+                dense: true,
+                contentPadding: EdgeInsets.zero,
+                value: _isOutcomeChecked(topic, o),
+                title: Text(o.name, style: const TextStyle(fontSize: 14)),
+                controlAffinity: ListTileControlAffinity.leading,
+                onChanged: (_) => _toggleOutcome(topic, o),
+              );
+            }).toList(),
           ),
         ),
       ],

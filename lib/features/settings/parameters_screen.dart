@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:ozel_ders_takip/data/local/app_database.dart';
 import 'package:ozel_ders_takip/data/providers/repositories_provider.dart';
+import 'package:ozel_ders_takip/features/settings/profile_screen.dart';
+import 'package:ozel_ders_takip/shared/constants/curriculum_folders.dart';
 import 'package:ozel_ders_takip/shared/i18n/strings_tr.dart';
 import 'package:ozel_ders_takip/shared/theme/app_theme.dart';
 import 'package:ozel_ders_takip/shared/utils/name_format.dart';
@@ -27,6 +29,8 @@ class _ParametersScreenState extends ConsumerState<ParametersScreen> {
   Widget build(BuildContext context) {
     final subjectsAsync =
         ref.watch(curriculumRepoProvider).watchSubjects();
+    final profile = ref.watch(teacherProfileProvider).asData?.value;
+    final visibleFolders = profile?.visibleFolders ?? const <String>[];
 
     return Scaffold(
       appBar: AppBar(
@@ -40,7 +44,9 @@ class _ParametersScreenState extends ConsumerState<ParametersScreen> {
               if (!mounted) return;
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('TYT / AYT Matematik müfredatı kontrol edildi'),
+                  content: Text(
+                    'Tüm branş müfredatları (TYT/AYT + 9–11) kontrol edildi',
+                  ),
                 ),
               );
             },
@@ -85,7 +91,7 @@ class _ParametersScreenState extends ConsumerState<ParametersScreen> {
                             .ensureDefaultCurriculum();
                       },
                       icon: const Icon(Icons.cloud_download_outlined),
-                      label: const Text('TYT / AYT Matematik yükle'),
+                      label: const Text('Varsayılan müfredatı yükle'),
                     ),
                     const SizedBox(height: 8),
                     FilledButton.icon(
@@ -104,12 +110,95 @@ class _ParametersScreenState extends ConsumerState<ParametersScreen> {
               ),
             );
           }
+          // Klasöre göre grupla (varsayılan: MATEMATİK)
+          final byFolder = <String, List<CurriculumSubject>>{};
+          for (final s in subjects) {
+            final folder =
+                (s.folder.trim().isEmpty) ? 'MATEMATİK' : s.folder.trim();
+            byFolder.putIfAbsent(folder, () => []).add(s);
+          }
+          var folders = byFolder.keys.toList()
+            ..sort(CurriculumFolders.compare);
+
+          // Profilde seçili görünecek dersler varsa filtrele
+          if (visibleFolders.isNotEmpty) {
+            final allow = visibleFolders.toSet();
+            folders = folders.where((f) => allow.contains(f)).toList();
+          }
+
+          if (folders.isEmpty) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  visibleFolders.isNotEmpty
+                      ? 'Seçili ders klasörlerinde içerik yok. Profil veya müfredat ayarlarını kontrol edin.'
+                      : StringsTr.noSubjectsYet,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: AppColors.muted),
+                ),
+              ),
+            );
+          }
+
           return ListView.builder(
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 24),
-            itemCount: subjects.length,
-            itemBuilder: (context, i) => _SubjectTile(subject: subjects[i]),
+            itemCount: folders.length,
+            itemBuilder: (context, i) {
+              final folder = folders[i];
+              final list = byFolder[folder]!;
+              return _FolderTile(
+                folder: folder,
+                subjects: list,
+                initiallyExpanded: false,
+              );
+            },
           );
         },
+      ),
+    );
+  }
+}
+
+class _FolderTile extends StatelessWidget {
+  const _FolderTile({
+    required this.folder,
+    required this.subjects,
+    this.initiallyExpanded = false,
+  });
+  final String folder;
+  final List<CurriculumSubject> subjects;
+  final bool initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          key: ValueKey('folder-$folder-$initiallyExpanded'),
+          initiallyExpanded: initiallyExpanded,
+          leading: const Icon(Icons.folder, color: AppColors.primary),
+          title: Text(
+            folder,
+            style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: 0.3),
+          ),
+          subtitle: Text(
+            '${subjects.length} ders',
+            style: const TextStyle(fontSize: 12, color: AppColors.muted),
+          ),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+              child: Column(
+                children: subjects
+                    .map((s) => _SubjectTile(subject: s))
+                    .toList(),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -127,6 +216,7 @@ class _SubjectTile extends ConsumerWidget {
       child: Theme(
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
+          initiallyExpanded: false,
           leading: const Icon(Icons.school_outlined, color: AppColors.primary),
           title: Text(
             subject.name,
@@ -211,6 +301,7 @@ class _UnitTile extends ConsumerWidget {
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
+            initiallyExpanded: false,
             leading: const Icon(Icons.folder_outlined, color: AppColors.accent, size: 22),
             title: Text(unit.name, style: const TextStyle(fontWeight: FontWeight.w600)),
             subtitle: const Text(StringsTr.curriculumUnit, style: TextStyle(fontSize: 12)),
@@ -289,6 +380,7 @@ class _TopicTile extends ConsumerWidget {
         child: Theme(
           data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
           child: ExpansionTile(
+            initiallyExpanded: false,
             leading: const Icon(Icons.menu_book_outlined, color: AppColors.warning, size: 20),
             title: Text(topic.name, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
             subtitle: const Text(StringsTr.curriculumTopic, style: TextStyle(fontSize: 11)),

@@ -9,8 +9,10 @@ import 'package:ozel_ders_takip/data/providers/payment_providers.dart';
 import 'package:ozel_ders_takip/features/students/widgets/student_book_resource_dialog.dart';
 import 'package:ozel_ders_takip/features/students/widgets/student_edit_dialog.dart';
 import 'package:ozel_ders_takip/data/repositories/schedule_repo.dart';
+import 'package:ozel_ders_takip/shared/constants/student_grade_levels.dart';
 import 'package:ozel_ders_takip/shared/i18n/strings_tr.dart';
 import 'package:ozel_ders_takip/shared/theme/app_theme.dart';
+import 'package:ozel_ders_takip/shared/utils/phone_format.dart';
 
 final _dateTimeFormat = DateFormat('dd MMMM yyyy HH:mm', 'tr_TR');
 
@@ -212,7 +214,7 @@ class _StudentsDetailContentState
                             widget.student.phone!.trim().isNotEmpty) ...[
                           _buildInfoRow(
                             icon: Icons.phone_outlined,
-                            value: _formatPhoneDisplay(widget.student.phone!),
+                            value: formatTurkishPhoneDisplay(widget.student.phone!),
                           ),
                           const SizedBox(height: 10),
                         ],
@@ -220,6 +222,17 @@ class _StudentsDetailContentState
                           icon: Icons.payments_outlined,
                           value: '${widget.student.hourlyRate} ₺/saat',
                         ),
+                        if (widget.student.gradeLevel != null &&
+                            widget.student.gradeLevel!.trim().isNotEmpty) ...[
+                          const SizedBox(height: 10),
+                          _buildInfoRow(
+                            icon: Icons.school_outlined,
+                            value: StudentGradeLevels.labelFor(
+                                  widget.student.gradeLevel,
+                                ) ??
+                                widget.student.gradeLevel!,
+                          ),
+                        ],
                         if (widget.student.notes != null &&
                             widget.student.notes!.trim().isNotEmpty) ...[
                           const SizedBox(height: 12),
@@ -306,7 +319,9 @@ class _StudentsDetailContentState
                         child: Text(
                           (widget.student.guardianPhone ?? '').trim().isEmpty
                               ? StringsTr.notEntered
-                              : widget.student.guardianPhone!,
+                              : formatTurkishPhoneDisplay(
+                                  widget.student.guardianPhone!,
+                                ),
                           style: TextStyle(
                             color: (widget.student.guardianPhone ?? '')
                                     .trim()
@@ -464,28 +479,46 @@ class _StudentsDetailContentState
                 },
               ),
             ),
+            const SizedBox(height: 16),
+
+            Card(
+              clipBehavior: Clip.antiAlias,
+              child: ListTile(
+                contentPadding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                leading: const Icon(
+                  Icons.task_alt_outlined,
+                  color: AppColors.primary,
+                  size: 22,
+                ),
+                title: const Text(
+                  StringsTr.completedTopicsTitle,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                subtitle: const Text(
+                  StringsTr.completedTopicsSubtitle,
+                  style: TextStyle(fontSize: 12, color: AppColors.muted),
+                ),
+                trailing: const Icon(
+                  Icons.chevron_right,
+                  color: AppColors.muted,
+                ),
+                onTap: () {
+                  context.push(
+                    '${AppRouter.students}/${widget.student.id}/completed-topics',
+                    extra: widget.student,
+                  );
+                },
+              ),
+            ),
           ],
         ),
       ),
     );
-  }
-
-  /// Örn. 05322718856 → 0 (532) 271 88 56
-  String _formatPhoneDisplay(String raw) {
-    var digits = raw.replaceAll(RegExp(r'[^0-9]'), '');
-    if (digits.startsWith('90') && digits.length >= 12) {
-      digits = digits.substring(2);
-    }
-    if (digits.length == 10 && !digits.startsWith('0')) {
-      digits = '0$digits';
-    }
-    if (digits.length == 11 && digits.startsWith('0')) {
-      return '0 (${digits.substring(1, 4)}) '
-          '${digits.substring(4, 7)} '
-          '${digits.substring(7, 9)} '
-          '${digits.substring(9, 11)}';
-    }
-    return raw.trim();
   }
 
   Widget _buildInfoRow({

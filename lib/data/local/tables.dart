@@ -12,6 +12,8 @@ class Students extends Table {
   TextColumn get guardianPhone => text().nullable()(); // Veli telefon
   TextColumn get bookResource => text().nullable()(); // SORU BANKASI - KONU ANLATIMLI
   TextColumn get bookResourcePractice => text().nullable()(); // DENEME
+  /// Örn. 9, 10, 11, 12, lgs, tyt, ayt, tyt_ayt
+  TextColumn get gradeLevel => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
@@ -122,12 +124,32 @@ class HomeworkItems extends Table {
   TextColumn get status => text().withDefault(const Constant('pending'))();
   // 'pending' | 'done' | 'not_done' | 'partial' | 'not_understood'
   TextColumn get statusNote => text().nullable()();
+  /// Anlamadı için: gerekenler yapıldı → takip listesinden çıkar
+  BoolColumn get attentionCleared =>
+      boolean().withDefault(const Constant(false))();
   DateTimeColumn get dueAt => dateTime().nullable()(); // Bitiş tarihi
   DateTimeColumn get statusChangedAt => dateTime().nullable()();
   DateTimeColumn get createdAt => dateTime()();
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+/// Öğrencinin tamamladığı müfredat konu / kazanım etiketleri (manuel + derslerden).
+class StudentTopicProgress extends Table {
+  TextColumn get id => text()();
+  TextColumn get studentId => text()();
+  /// Konu adı veya "Konu — Kazanım"
+  TextColumn get label => text()();
+  DateTimeColumn get createdAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  List<Set<Column>> get uniqueKeys => [
+        {studentId, label},
+      ];
 }
 
 // Öğretmen yapılacaklar listesi
@@ -197,10 +219,13 @@ class LessonPayments extends Table {
   ];
 }
 
-/// Müfredat: Ders (branş)
+/// Müfredat: Ders (branş) — klasör altında gruplanır (örn. MATEMATİK)
 class CurriculumSubjects extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
+  /// Üst klasör adı (örn. "MATEMATİK"); boşsa "Diğer"
+  TextColumn get folder =>
+      text().withDefault(const Constant('MATEMATİK'))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
   DateTimeColumn get createdAt => dateTime()();
 

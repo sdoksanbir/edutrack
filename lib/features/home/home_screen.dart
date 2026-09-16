@@ -6,9 +6,11 @@ import 'package:ozel_ders_takip/app/router.dart';
 import 'package:ozel_ders_takip/data/local/app_database.dart';
 import 'package:ozel_ders_takip/data/providers/repositories_provider.dart';
 import 'package:ozel_ders_takip/features/schedule/schedule_screen.dart';
+import 'package:ozel_ders_takip/features/settings/profile_screen.dart';
 import 'package:ozel_ders_takip/shared/i18n/strings_tr.dart';
 import 'package:ozel_ders_takip/shared/models/daily_lesson.dart';
 import 'package:ozel_ders_takip/shared/theme/app_theme.dart';
+import 'dart:io';
 
 class _TodayLessonRow {
   final Lesson lesson;
@@ -92,15 +94,13 @@ class HomeScreen extends ConsumerWidget {
         DateFormat('d MMMM yyyy, EEEE', 'tr_TR').format(DateTime.now());
     final todayLessons =
         ref.watch(todayLessonsProvider).asData?.value ?? [];
-    final plannedToday = todayLessons
-        .where((row) =>
-            row.lesson.status == null ||
-            row.lesson.status == 'planned')
-        .length;
+    // Bugünkü tüm dersler (yapıldı / planlı / yapılmadı dahil)
+    final todayLessonCount = todayLessons.length;
     final homeworkAlerts = ref.watch(homeworkAlertCountProvider);
     final studentCount =
         ref.watch(_activeStudentCountProvider).asData?.value ?? 0;
     final openTodos = ref.watch(_openTodosCountProvider).asData?.value ?? 0;
+    final profile = ref.watch(teacherProfileProvider).asData?.value;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -108,27 +108,80 @@ class HomeScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
           children: [
-            Text(
-              _greeting(),
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        _greeting(),
+                        style: Theme.of(context)
+                            .textTheme
+                            .headlineMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textPrimary,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        todayLabel,
+                        style: const TextStyle(
+                          color: AppColors.muted,
+                          fontSize: 14,
+                        ),
+                      ),
+                      if (profile != null &&
+                          profile.fullName.trim().isNotEmpty) ...[
+                        const SizedBox(height: 6),
+                        Text(
+                          profile.displayName,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 13,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        if (profile.branches.isNotEmpty)
+                          Text(
+                            profile.branchesLabel,
+                            style: const TextStyle(
+                              color: AppColors.muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                      ],
+                    ],
                   ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              todayLabel,
-              style: TextStyle(
-                color: AppColors.muted,
-                fontSize: 14,
-              ),
+                ),
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: () => context.push(AppRouter.profile),
+                  customBorder: const CircleBorder(),
+                  child: CircleAvatar(
+                    radius: 24,
+                    backgroundColor: AppColors.primarySoft,
+                    backgroundImage: profile != null && profile.hasPhoto
+                        ? FileImage(File(profile.photoPath!))
+                        : null,
+                    child: profile == null || !profile.hasPhoto
+                        ? const Icon(
+                            Icons.person_outline,
+                            color: AppColors.primary,
+                          )
+                        : null,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
             _SummaryRow(
               items: [
                 _SummaryData(
                   label: 'Bugün',
-                  value: '$plannedToday',
+                  value: '$todayLessonCount',
                   subtitle: 'ders',
                   color: AppColors.primary,
                   onTap: () => context.go(AppRouter.schedule),
@@ -156,6 +209,8 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 16),
+            _TodayLessonsCollapse(lessons: todayLessons),
             const SizedBox(height: 28),
             Text(
               StringsTr.homeShortcuts,
@@ -236,33 +291,93 @@ class HomeScreen extends ConsumerWidget {
                 ),
               ],
             ),
-            if (todayLessons.isNotEmpty) ...[
-              const SizedBox(height: 28),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      StringsTr.homeTodayLessons,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textPrimary,
-                          ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => context.go(AppRouter.schedule),
-                    child: const Text('Takvime git'),
-                  ),
-                ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _TodayLessonsCollapse extends StatelessWidget {
+  const _TodayLessonsCollapse({required this.lessons});
+
+  final List<_TodayLessonRow> lessons;
+
+  static const Color _tileColor = Color(0xFF1A3A3A);
+  static const Color _accentColor = Color(0xFF2EC4B6);
+  static const Color _borderColor = Color(0xFF2A6B66);
+
+  @override
+  Widget build(BuildContext context) {
+    final count = lessons.length;
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 0,
+      color: _tileColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: _borderColor, width: 1.2),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: count > 0,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+          childrenPadding: const EdgeInsets.fromLTRB(10, 0, 10, 12),
+          leading: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: _accentColor.withValues(alpha: 0.18),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(
+              Icons.today_outlined,
+              color: _accentColor,
+              size: 22,
+            ),
+          ),
+          title: const Text(
+            StringsTr.homeTodayLessons,
+            style: TextStyle(
+              fontWeight: FontWeight.w800,
+              color: AppColors.textPrimary,
+              fontSize: 16,
+            ),
+          ),
+          subtitle: Text(
+            count == 0 ? 'Bugün ders yok' : '$count ders',
+            style: TextStyle(
+              color: _accentColor.withValues(alpha: 0.9),
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => context.go(AppRouter.schedule),
+                icon: const Icon(Icons.calendar_month_outlined, size: 16),
+                label: const Text('Takvime git'),
+                style: TextButton.styleFrom(foregroundColor: _accentColor),
               ),
-              const SizedBox(height: 8),
-              ...todayLessons.take(5).map(
-                    (row) => _TodayLessonTile(
-                      lesson: row.lesson,
-                      studentName: row.studentName,
-                    ),
-                  ),
-            ],
+            ),
+            if (lessons.isEmpty)
+              const Padding(
+                padding: EdgeInsets.fromLTRB(8, 4, 8, 8),
+                child: Text(
+                  'Bugün için kayıtlı ders bulunmuyor.',
+                  style: TextStyle(color: AppColors.muted, fontSize: 13),
+                ),
+              )
+            else
+              ...lessons.map(
+                (row) => _TodayLessonTile(
+                  lesson: row.lesson,
+                  studentName: row.studentName,
+                ),
+              ),
           ],
         ),
       ),

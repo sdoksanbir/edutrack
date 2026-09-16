@@ -1,16 +1,119 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:drift/drift.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:ozel_ders_takip/data/local/app_database.dart';
+import 'package:ozel_ders_takip/shared/models/teacher_profile.dart';
+import 'package:ozel_ders_takip/shared/utils/phone_format.dart';
+import 'package:path/path.dart' as p;
+import 'package:path_provider/path_provider.dart';
 
 class AppSettingsRepository {
   final AppDatabase _db;
+  final ImagePicker _imagePicker = ImagePicker();
 
   AppSettingsRepository(this._db);
+
+  static const _kTeacherName = 'teacher_full_name';
+  static const _kTeacherPhone = 'teacher_phone';
+  static const _kTeacherPhoto = 'teacher_photo_path';
+  static const _kTeacherBranches = 'teacher_branches';
+  static const _kVisibleFolders = 'teacher_visible_folders';
 
   /// Genel kullanım için tarih formatı: 'YYYY-MM-DD'
   String _formatDate(DateTime date) {
     return '${date.year.toString().padLeft(4, '0')}-'
         '${date.month.toString().padLeft(2, '0')}-'
         '${date.day.toString().padLeft(2, '0')}';
+  }
+
+  List<String> _decodeList(String? raw) {
+    if (raw == null || raw.trim().isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) {
+        return decoded
+            .map((e) => e.toString().trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+      }
+    } catch (_) {
+      return raw
+          .split(',')
+          .map((e) => e.trim())
+          .where((e) => e.isNotEmpty)
+          .toList();
+    }
+    return const [];
+  }
+
+  String _encodeList(List<String> items) => jsonEncode(items);
+
+  Future<TeacherProfile> getTeacherProfile() async {
+    final name = await getSetting(_kTeacherName) ?? '';
+    final phone = await getSetting(_kTeacherPhone);
+    final photo = await getSetting(_kTeacherPhoto);
+    final branches = _decodeList(await getSetting(_kTeacherBranches));
+    final visible = _decodeList(await getSetting(_kVisibleFolders));
+    return TeacherProfile(
+      fullName: name,
+      phone: (phone == null || phone.isEmpty) ? null : phone,
+      photoPath: (photo == null || photo.isEmpty) ? null : photo,
+      branches: branches,
+      visibleFolders: visible,
+    );
+  }
+
+  Future<void> saveTeacherProfile({
+    required String fullName,
+    required List<String> branches,
+    required List<String> visibleFolders,
+    String? phone,
+    String? photoPath,
+    bool clearPhoto = false,
+  }) async {
+    await setSetting(_kTeacherName, fullName.trim());
+    await setSetting(
+      _kTeacherPhone,
+      formatTurkishPhone(phone) ?? '',
+    );
+    await setSetting(_kTeacherBranches, _encodeList(branches));
+    await setSetting(_kVisibleFolders, _encodeList(visibleFolders));
+    if (clearPhoto) {
+      final old = await getSetting(_kTeacherPhoto);
+      if (old != null && old.isNotEmpty) {
+        final f = File(old);
+        if (await f.exists()) await f.delete();
+      }
+      await setSetting(_kTeacherPhoto, '');
+    } else if (photoPath != null) {
+      await setSetting(_kTeacherPhoto, photoPath);
+    }
+  }
+
+  /// Galeri veya kameradan profil fotoğrafı kaydeder; dosya yolunu döner.
+  Future<String?> pickAndSaveTeacherPhoto({required bool fromCamera}) async {
+    final image = await _imagePicker.pickImage(
+      source: fromCamera ? ImageSource.camera : ImageSource.gallery,
+      imageQuality: 85,
+      maxWidth: 1024,
+    );
+    if (image == null) return null;
+
+    final appDir = await getApplicationDocumentsDirectory();
+    final profileDir = Directory(p.join(appDir.path, 'profile'));
+    if (!await profileDir.exists()) {
+      await profileDir.create(recursive: true);
+    }
+
+    final targetPath = p.join(profileDir.path, 'avatar.jpg');
+    final target = File(targetPath);
+    if (await target.exists()) await target.delete();
+    await File(image.path).copy(targetPath);
+
+    await setSetting(_kTeacherPhoto, targetPath);
+    return targetPath;
   }
 
   /// Ayar değerini getirir
@@ -28,12 +131,10 @@ class AppSettingsRepository {
         .getSingleOrNull();
 
     if (existing != null) {
-      // Update
       await (_db.update(_db.appSettings)
             ..where((s) => s.key.equals(key)))
           .write(AppSettingsCompanion(value: Value(value)));
     } else {
-      // Insert
       await _db.into(_db.appSettings).insert(
             AppSettingsCompanion.insert(key: key, value: value),
           );
@@ -51,10 +152,6 @@ class AppSettingsRepository {
   }
 
   /// Program üretimi için global bitiş tarihini getirir.
-  ///
-  /// - AppSettings.key = 'schedule_end_date', value = 'YYYY-MM-DD'
-  /// - Kayıt yoksa, bugünden 1 yıl sonrasını varsayılan olarak üretir
-  ///   ve veritabanına yazar.
   Future<DateTime> getScheduleEndDate() async {
     final raw = await getSetting('schedule_end_date');
     if (raw != null) {
@@ -66,12 +163,9 @@ class AppSettingsRepository {
           final day = int.parse(parts[2]);
           return DateTime(year, month, day);
         }
-      } catch (_) {
-        // Aşağıda varsayılan değere düşülür.
-      }
+      } catch (_) {}
     }
 
-    // Varsayılan: bugünden 1 yıl sonrası
     final now = DateTime.now();
     final defaultEnd = DateTime(now.year + 1, now.month, now.day);
     await setScheduleEndDate(defaultEnd);
@@ -79,10 +173,6 @@ class AppSettingsRepository {
   }
 
   /// Varsayılan haftalık ders bitiş tarihini getirir.
-  ///
-  /// - AppSettings.key = 'default_schedule_end_date', value = 'YYYY-MM-DD'
-  /// - Kayıt yoksa, bugünden 1 yıl sonrasını varsayılan olarak üretir
-  ///   ve veritabanına yazar.
   Future<DateTime> getDefaultScheduleEndDate() async {
     final raw = await getSetting('default_schedule_end_date');
     if (raw != null) {
@@ -94,29 +184,20 @@ class AppSettingsRepository {
           final day = int.parse(parts[2]);
           return DateTime(year, month, day);
         }
-      } catch (_) {
-        // Aşağıda varsayılan değere düşülür.
-      }
+      } catch (_) {}
     }
 
-    // Varsayılan: bugünden 1 yıl sonrası
     final now = DateTime.now();
     final defaultEnd = DateTime(now.year + 1, now.month, now.day);
     await setDefaultScheduleEndDate(defaultEnd);
     return defaultEnd;
   }
 
-  /// Varsayılan haftalık ders bitiş tarihini set eder.
-  ///
-  /// date sadece tarih kısmı ile kaydedilir (YYYY-MM-DD).
   Future<void> setDefaultScheduleEndDate(DateTime date) async {
     final normalized = DateTime(date.year, date.month, date.day);
     await setSetting('default_schedule_end_date', _formatDate(normalized));
   }
 
-  /// Program üretimi için global bitiş tarihini set eder.
-  ///
-  /// date sadece tarih kısmı ile kaydedilir (YYYY-MM-DD).
   Future<void> setScheduleEndDate(DateTime date) async {
     final normalized = DateTime(date.year, date.month, date.day);
     await setSetting('schedule_end_date', _formatDate(normalized));

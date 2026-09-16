@@ -21,8 +21,15 @@ class HomeworkStatus {
     return DateTime.now().isAfter(endOfDue);
   }
 
-  static bool needsAttention(String status, DateTime? dueAt) =>
-      isAlert(status) || isOverdue(status, dueAt);
+  static bool needsAttention(
+    String status,
+    DateTime? dueAt, {
+    bool attentionCleared = false,
+  }) {
+    // Anlamadı + gerekenler yapıldı → takip listesinde gösterme
+    if (attentionCleared && status == notUnderstood) return false;
+    return isAlert(status) || isOverdue(status, dueAt);
+  }
 
   static DateTime defaultDueDate(DateTime assignedAt) {
     final base = DateTime(

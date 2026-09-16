@@ -116,6 +116,17 @@ class $StudentsTable extends Students with TableInfo<$StudentsTable, Student> {
         type: DriftSqlType.string,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _gradeLevelMeta = const VerificationMeta(
+    'gradeLevel',
+  );
+  @override
+  late final GeneratedColumn<String> gradeLevel = GeneratedColumn<String>(
+    'grade_level',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -139,6 +150,7 @@ class $StudentsTable extends Students with TableInfo<$StudentsTable, Student> {
     guardianPhone,
     bookResource,
     bookResourcePractice,
+    gradeLevel,
     createdAt,
   ];
   @override
@@ -228,6 +240,12 @@ class $StudentsTable extends Students with TableInfo<$StudentsTable, Student> {
         ),
       );
     }
+    if (data.containsKey('grade_level')) {
+      context.handle(
+        _gradeLevelMeta,
+        gradeLevel.isAcceptableOrUnknown(data['grade_level']!, _gradeLevelMeta),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -285,6 +303,10 @@ class $StudentsTable extends Students with TableInfo<$StudentsTable, Student> {
         DriftSqlType.string,
         data['${effectivePrefix}book_resource_practice'],
       ),
+      gradeLevel: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}grade_level'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -309,6 +331,9 @@ class Student extends DataClass implements Insertable<Student> {
   final String? guardianPhone;
   final String? bookResource;
   final String? bookResourcePractice;
+
+  /// Örn. 9, 10, 11, 12, lgs, tyt, ayt, tyt_ayt
+  final String? gradeLevel;
   final DateTime createdAt;
   const Student({
     required this.id,
@@ -321,6 +346,7 @@ class Student extends DataClass implements Insertable<Student> {
     this.guardianPhone,
     this.bookResource,
     this.bookResourcePractice,
+    this.gradeLevel,
     required this.createdAt,
   });
   @override
@@ -347,6 +373,9 @@ class Student extends DataClass implements Insertable<Student> {
     }
     if (!nullToAbsent || bookResourcePractice != null) {
       map['book_resource_practice'] = Variable<String>(bookResourcePractice);
+    }
+    if (!nullToAbsent || gradeLevel != null) {
+      map['grade_level'] = Variable<String>(gradeLevel);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
@@ -376,6 +405,9 @@ class Student extends DataClass implements Insertable<Student> {
       bookResourcePractice: bookResourcePractice == null && nullToAbsent
           ? const Value.absent()
           : Value(bookResourcePractice),
+      gradeLevel: gradeLevel == null && nullToAbsent
+          ? const Value.absent()
+          : Value(gradeLevel),
       createdAt: Value(createdAt),
     );
   }
@@ -398,6 +430,7 @@ class Student extends DataClass implements Insertable<Student> {
       bookResourcePractice: serializer.fromJson<String?>(
         json['bookResourcePractice'],
       ),
+      gradeLevel: serializer.fromJson<String?>(json['gradeLevel']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
   }
@@ -415,6 +448,7 @@ class Student extends DataClass implements Insertable<Student> {
       'guardianPhone': serializer.toJson<String?>(guardianPhone),
       'bookResource': serializer.toJson<String?>(bookResource),
       'bookResourcePractice': serializer.toJson<String?>(bookResourcePractice),
+      'gradeLevel': serializer.toJson<String?>(gradeLevel),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
   }
@@ -430,6 +464,7 @@ class Student extends DataClass implements Insertable<Student> {
     Value<String?> guardianPhone = const Value.absent(),
     Value<String?> bookResource = const Value.absent(),
     Value<String?> bookResourcePractice = const Value.absent(),
+    Value<String?> gradeLevel = const Value.absent(),
     DateTime? createdAt,
   }) => Student(
     id: id ?? this.id,
@@ -448,6 +483,7 @@ class Student extends DataClass implements Insertable<Student> {
     bookResourcePractice: bookResourcePractice.present
         ? bookResourcePractice.value
         : this.bookResourcePractice,
+    gradeLevel: gradeLevel.present ? gradeLevel.value : this.gradeLevel,
     createdAt: createdAt ?? this.createdAt,
   );
   Student copyWithCompanion(StudentsCompanion data) {
@@ -472,6 +508,9 @@ class Student extends DataClass implements Insertable<Student> {
       bookResourcePractice: data.bookResourcePractice.present
           ? data.bookResourcePractice.value
           : this.bookResourcePractice,
+      gradeLevel: data.gradeLevel.present
+          ? data.gradeLevel.value
+          : this.gradeLevel,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
   }
@@ -489,6 +528,7 @@ class Student extends DataClass implements Insertable<Student> {
           ..write('guardianPhone: $guardianPhone, ')
           ..write('bookResource: $bookResource, ')
           ..write('bookResourcePractice: $bookResourcePractice, ')
+          ..write('gradeLevel: $gradeLevel, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
         .toString();
@@ -506,6 +546,7 @@ class Student extends DataClass implements Insertable<Student> {
     guardianPhone,
     bookResource,
     bookResourcePractice,
+    gradeLevel,
     createdAt,
   );
   @override
@@ -522,6 +563,7 @@ class Student extends DataClass implements Insertable<Student> {
           other.guardianPhone == this.guardianPhone &&
           other.bookResource == this.bookResource &&
           other.bookResourcePractice == this.bookResourcePractice &&
+          other.gradeLevel == this.gradeLevel &&
           other.createdAt == this.createdAt);
 }
 
@@ -536,6 +578,7 @@ class StudentsCompanion extends UpdateCompanion<Student> {
   final Value<String?> guardianPhone;
   final Value<String?> bookResource;
   final Value<String?> bookResourcePractice;
+  final Value<String?> gradeLevel;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const StudentsCompanion({
@@ -549,6 +592,7 @@ class StudentsCompanion extends UpdateCompanion<Student> {
     this.guardianPhone = const Value.absent(),
     this.bookResource = const Value.absent(),
     this.bookResourcePractice = const Value.absent(),
+    this.gradeLevel = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -563,6 +607,7 @@ class StudentsCompanion extends UpdateCompanion<Student> {
     this.guardianPhone = const Value.absent(),
     this.bookResource = const Value.absent(),
     this.bookResourcePractice = const Value.absent(),
+    this.gradeLevel = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -580,6 +625,7 @@ class StudentsCompanion extends UpdateCompanion<Student> {
     Expression<String>? guardianPhone,
     Expression<String>? bookResource,
     Expression<String>? bookResourcePractice,
+    Expression<String>? gradeLevel,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
   }) {
@@ -595,6 +641,7 @@ class StudentsCompanion extends UpdateCompanion<Student> {
       if (bookResource != null) 'book_resource': bookResource,
       if (bookResourcePractice != null)
         'book_resource_practice': bookResourcePractice,
+      if (gradeLevel != null) 'grade_level': gradeLevel,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -611,6 +658,7 @@ class StudentsCompanion extends UpdateCompanion<Student> {
     Value<String?>? guardianPhone,
     Value<String?>? bookResource,
     Value<String?>? bookResourcePractice,
+    Value<String?>? gradeLevel,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
   }) {
@@ -625,6 +673,7 @@ class StudentsCompanion extends UpdateCompanion<Student> {
       guardianPhone: guardianPhone ?? this.guardianPhone,
       bookResource: bookResource ?? this.bookResource,
       bookResourcePractice: bookResourcePractice ?? this.bookResourcePractice,
+      gradeLevel: gradeLevel ?? this.gradeLevel,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
     );
@@ -665,6 +714,9 @@ class StudentsCompanion extends UpdateCompanion<Student> {
         bookResourcePractice.value,
       );
     }
+    if (gradeLevel.present) {
+      map['grade_level'] = Variable<String>(gradeLevel.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -687,6 +739,7 @@ class StudentsCompanion extends UpdateCompanion<Student> {
           ..write('guardianPhone: $guardianPhone, ')
           ..write('bookResource: $bookResource, ')
           ..write('bookResourcePractice: $bookResourcePractice, ')
+          ..write('gradeLevel: $gradeLevel, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -5077,6 +5130,16 @@ class $CurriculumSubjectsTable extends CurriculumSubjects
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _folderMeta = const VerificationMeta('folder');
+  @override
+  late final GeneratedColumn<String> folder = GeneratedColumn<String>(
+    'folder',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('MATEMATİK'),
+  );
   static const VerificationMeta _sortOrderMeta = const VerificationMeta(
     'sortOrder',
   );
@@ -5101,7 +5164,13 @@ class $CurriculumSubjectsTable extends CurriculumSubjects
     requiredDuringInsert: true,
   );
   @override
-  List<GeneratedColumn> get $columns => [id, name, sortOrder, createdAt];
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    folder,
+    sortOrder,
+    createdAt,
+  ];
   @override
   String get aliasedName => _alias ?? actualTableName;
   @override
@@ -5126,6 +5195,12 @@ class $CurriculumSubjectsTable extends CurriculumSubjects
       );
     } else if (isInserting) {
       context.missing(_nameMeta);
+    }
+    if (data.containsKey('folder')) {
+      context.handle(
+        _folderMeta,
+        folder.isAcceptableOrUnknown(data['folder']!, _folderMeta),
+      );
     }
     if (data.containsKey('sort_order')) {
       context.handle(
@@ -5158,6 +5233,10 @@ class $CurriculumSubjectsTable extends CurriculumSubjects
         DriftSqlType.string,
         data['${effectivePrefix}name'],
       )!,
+      folder: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}folder'],
+      )!,
       sortOrder: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
@@ -5179,11 +5258,15 @@ class CurriculumSubject extends DataClass
     implements Insertable<CurriculumSubject> {
   final String id;
   final String name;
+
+  /// Üst klasör adı (örn. "MATEMATİK"); boşsa "Diğer"
+  final String folder;
   final int sortOrder;
   final DateTime createdAt;
   const CurriculumSubject({
     required this.id,
     required this.name,
+    required this.folder,
     required this.sortOrder,
     required this.createdAt,
   });
@@ -5192,6 +5275,7 @@ class CurriculumSubject extends DataClass
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
+    map['folder'] = Variable<String>(folder);
     map['sort_order'] = Variable<int>(sortOrder);
     map['created_at'] = Variable<DateTime>(createdAt);
     return map;
@@ -5201,6 +5285,7 @@ class CurriculumSubject extends DataClass
     return CurriculumSubjectsCompanion(
       id: Value(id),
       name: Value(name),
+      folder: Value(folder),
       sortOrder: Value(sortOrder),
       createdAt: Value(createdAt),
     );
@@ -5214,6 +5299,7 @@ class CurriculumSubject extends DataClass
     return CurriculumSubject(
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
+      folder: serializer.fromJson<String>(json['folder']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
     );
@@ -5224,6 +5310,7 @@ class CurriculumSubject extends DataClass
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
+      'folder': serializer.toJson<String>(folder),
       'sortOrder': serializer.toJson<int>(sortOrder),
       'createdAt': serializer.toJson<DateTime>(createdAt),
     };
@@ -5232,11 +5319,13 @@ class CurriculumSubject extends DataClass
   CurriculumSubject copyWith({
     String? id,
     String? name,
+    String? folder,
     int? sortOrder,
     DateTime? createdAt,
   }) => CurriculumSubject(
     id: id ?? this.id,
     name: name ?? this.name,
+    folder: folder ?? this.folder,
     sortOrder: sortOrder ?? this.sortOrder,
     createdAt: createdAt ?? this.createdAt,
   );
@@ -5244,6 +5333,7 @@ class CurriculumSubject extends DataClass
     return CurriculumSubject(
       id: data.id.present ? data.id.value : this.id,
       name: data.name.present ? data.name.value : this.name,
+      folder: data.folder.present ? data.folder.value : this.folder,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
     );
@@ -5254,6 +5344,7 @@ class CurriculumSubject extends DataClass
     return (StringBuffer('CurriculumSubject(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('folder: $folder, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt')
           ..write(')'))
@@ -5261,13 +5352,14 @@ class CurriculumSubject extends DataClass
   }
 
   @override
-  int get hashCode => Object.hash(id, name, sortOrder, createdAt);
+  int get hashCode => Object.hash(id, name, folder, sortOrder, createdAt);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       (other is CurriculumSubject &&
           other.id == this.id &&
           other.name == this.name &&
+          other.folder == this.folder &&
           other.sortOrder == this.sortOrder &&
           other.createdAt == this.createdAt);
 }
@@ -5275,12 +5367,14 @@ class CurriculumSubject extends DataClass
 class CurriculumSubjectsCompanion extends UpdateCompanion<CurriculumSubject> {
   final Value<String> id;
   final Value<String> name;
+  final Value<String> folder;
   final Value<int> sortOrder;
   final Value<DateTime> createdAt;
   final Value<int> rowid;
   const CurriculumSubjectsCompanion({
     this.id = const Value.absent(),
     this.name = const Value.absent(),
+    this.folder = const Value.absent(),
     this.sortOrder = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -5288,6 +5382,7 @@ class CurriculumSubjectsCompanion extends UpdateCompanion<CurriculumSubject> {
   CurriculumSubjectsCompanion.insert({
     required String id,
     required String name,
+    this.folder = const Value.absent(),
     this.sortOrder = const Value.absent(),
     required DateTime createdAt,
     this.rowid = const Value.absent(),
@@ -5297,6 +5392,7 @@ class CurriculumSubjectsCompanion extends UpdateCompanion<CurriculumSubject> {
   static Insertable<CurriculumSubject> custom({
     Expression<String>? id,
     Expression<String>? name,
+    Expression<String>? folder,
     Expression<int>? sortOrder,
     Expression<DateTime>? createdAt,
     Expression<int>? rowid,
@@ -5304,6 +5400,7 @@ class CurriculumSubjectsCompanion extends UpdateCompanion<CurriculumSubject> {
     return RawValuesInsertable({
       if (id != null) 'id': id,
       if (name != null) 'name': name,
+      if (folder != null) 'folder': folder,
       if (sortOrder != null) 'sort_order': sortOrder,
       if (createdAt != null) 'created_at': createdAt,
       if (rowid != null) 'rowid': rowid,
@@ -5313,6 +5410,7 @@ class CurriculumSubjectsCompanion extends UpdateCompanion<CurriculumSubject> {
   CurriculumSubjectsCompanion copyWith({
     Value<String>? id,
     Value<String>? name,
+    Value<String>? folder,
     Value<int>? sortOrder,
     Value<DateTime>? createdAt,
     Value<int>? rowid,
@@ -5320,6 +5418,7 @@ class CurriculumSubjectsCompanion extends UpdateCompanion<CurriculumSubject> {
     return CurriculumSubjectsCompanion(
       id: id ?? this.id,
       name: name ?? this.name,
+      folder: folder ?? this.folder,
       sortOrder: sortOrder ?? this.sortOrder,
       createdAt: createdAt ?? this.createdAt,
       rowid: rowid ?? this.rowid,
@@ -5334,6 +5433,9 @@ class CurriculumSubjectsCompanion extends UpdateCompanion<CurriculumSubject> {
     }
     if (name.present) {
       map['name'] = Variable<String>(name.value);
+    }
+    if (folder.present) {
+      map['folder'] = Variable<String>(folder.value);
     }
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
@@ -5352,6 +5454,7 @@ class CurriculumSubjectsCompanion extends UpdateCompanion<CurriculumSubject> {
     return (StringBuffer('CurriculumSubjectsCompanion(')
           ..write('id: $id, ')
           ..write('name: $name, ')
+          ..write('folder: $folder, ')
           ..write('sortOrder: $sortOrder, ')
           ..write('createdAt: $createdAt, ')
           ..write('rowid: $rowid')
@@ -6531,6 +6634,21 @@ class $HomeworkItemsTable extends HomeworkItems
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _attentionClearedMeta = const VerificationMeta(
+    'attentionCleared',
+  );
+  @override
+  late final GeneratedColumn<bool> attentionCleared = GeneratedColumn<bool>(
+    'attention_cleared',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("attention_cleared" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _dueAtMeta = const VerificationMeta('dueAt');
   @override
   late final GeneratedColumn<DateTime> dueAt = GeneratedColumn<DateTime>(
@@ -6574,6 +6692,7 @@ class $HomeworkItemsTable extends HomeworkItems
     detail,
     status,
     statusNote,
+    attentionCleared,
     dueAt,
     statusChangedAt,
     createdAt,
@@ -6651,6 +6770,15 @@ class $HomeworkItemsTable extends HomeworkItems
         statusNote.isAcceptableOrUnknown(data['status_note']!, _statusNoteMeta),
       );
     }
+    if (data.containsKey('attention_cleared')) {
+      context.handle(
+        _attentionClearedMeta,
+        attentionCleared.isAcceptableOrUnknown(
+          data['attention_cleared']!,
+          _attentionClearedMeta,
+        ),
+      );
+    }
     if (data.containsKey('due_at')) {
       context.handle(
         _dueAtMeta,
@@ -6719,6 +6847,10 @@ class $HomeworkItemsTable extends HomeworkItems
         DriftSqlType.string,
         data['${effectivePrefix}status_note'],
       ),
+      attentionCleared: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}attention_cleared'],
+      )!,
       dueAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}due_at'],
@@ -6750,6 +6882,9 @@ class HomeworkItem extends DataClass implements Insertable<HomeworkItem> {
   final String? detail;
   final String status;
   final String? statusNote;
+
+  /// Anlamadı için: gerekenler yapıldı → takip listesinden çıkar
+  final bool attentionCleared;
   final DateTime? dueAt;
   final DateTime? statusChangedAt;
   final DateTime createdAt;
@@ -6763,6 +6898,7 @@ class HomeworkItem extends DataClass implements Insertable<HomeworkItem> {
     this.detail,
     required this.status,
     this.statusNote,
+    required this.attentionCleared,
     this.dueAt,
     this.statusChangedAt,
     required this.createdAt,
@@ -6785,6 +6921,7 @@ class HomeworkItem extends DataClass implements Insertable<HomeworkItem> {
     if (!nullToAbsent || statusNote != null) {
       map['status_note'] = Variable<String>(statusNote);
     }
+    map['attention_cleared'] = Variable<bool>(attentionCleared);
     if (!nullToAbsent || dueAt != null) {
       map['due_at'] = Variable<DateTime>(dueAt);
     }
@@ -6812,6 +6949,7 @@ class HomeworkItem extends DataClass implements Insertable<HomeworkItem> {
       statusNote: statusNote == null && nullToAbsent
           ? const Value.absent()
           : Value(statusNote),
+      attentionCleared: Value(attentionCleared),
       dueAt: dueAt == null && nullToAbsent
           ? const Value.absent()
           : Value(dueAt),
@@ -6837,6 +6975,7 @@ class HomeworkItem extends DataClass implements Insertable<HomeworkItem> {
       detail: serializer.fromJson<String?>(json['detail']),
       status: serializer.fromJson<String>(json['status']),
       statusNote: serializer.fromJson<String?>(json['statusNote']),
+      attentionCleared: serializer.fromJson<bool>(json['attentionCleared']),
       dueAt: serializer.fromJson<DateTime?>(json['dueAt']),
       statusChangedAt: serializer.fromJson<DateTime?>(json['statusChangedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -6855,6 +6994,7 @@ class HomeworkItem extends DataClass implements Insertable<HomeworkItem> {
       'detail': serializer.toJson<String?>(detail),
       'status': serializer.toJson<String>(status),
       'statusNote': serializer.toJson<String?>(statusNote),
+      'attentionCleared': serializer.toJson<bool>(attentionCleared),
       'dueAt': serializer.toJson<DateTime?>(dueAt),
       'statusChangedAt': serializer.toJson<DateTime?>(statusChangedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -6871,6 +7011,7 @@ class HomeworkItem extends DataClass implements Insertable<HomeworkItem> {
     Value<String?> detail = const Value.absent(),
     String? status,
     Value<String?> statusNote = const Value.absent(),
+    bool? attentionCleared,
     Value<DateTime?> dueAt = const Value.absent(),
     Value<DateTime?> statusChangedAt = const Value.absent(),
     DateTime? createdAt,
@@ -6884,6 +7025,7 @@ class HomeworkItem extends DataClass implements Insertable<HomeworkItem> {
     detail: detail.present ? detail.value : this.detail,
     status: status ?? this.status,
     statusNote: statusNote.present ? statusNote.value : this.statusNote,
+    attentionCleared: attentionCleared ?? this.attentionCleared,
     dueAt: dueAt.present ? dueAt.value : this.dueAt,
     statusChangedAt: statusChangedAt.present
         ? statusChangedAt.value
@@ -6905,6 +7047,9 @@ class HomeworkItem extends DataClass implements Insertable<HomeworkItem> {
       statusNote: data.statusNote.present
           ? data.statusNote.value
           : this.statusNote,
+      attentionCleared: data.attentionCleared.present
+          ? data.attentionCleared.value
+          : this.attentionCleared,
       dueAt: data.dueAt.present ? data.dueAt.value : this.dueAt,
       statusChangedAt: data.statusChangedAt.present
           ? data.statusChangedAt.value
@@ -6925,6 +7070,7 @@ class HomeworkItem extends DataClass implements Insertable<HomeworkItem> {
           ..write('detail: $detail, ')
           ..write('status: $status, ')
           ..write('statusNote: $statusNote, ')
+          ..write('attentionCleared: $attentionCleared, ')
           ..write('dueAt: $dueAt, ')
           ..write('statusChangedAt: $statusChangedAt, ')
           ..write('createdAt: $createdAt')
@@ -6943,6 +7089,7 @@ class HomeworkItem extends DataClass implements Insertable<HomeworkItem> {
     detail,
     status,
     statusNote,
+    attentionCleared,
     dueAt,
     statusChangedAt,
     createdAt,
@@ -6960,6 +7107,7 @@ class HomeworkItem extends DataClass implements Insertable<HomeworkItem> {
           other.detail == this.detail &&
           other.status == this.status &&
           other.statusNote == this.statusNote &&
+          other.attentionCleared == this.attentionCleared &&
           other.dueAt == this.dueAt &&
           other.statusChangedAt == this.statusChangedAt &&
           other.createdAt == this.createdAt);
@@ -6975,6 +7123,7 @@ class HomeworkItemsCompanion extends UpdateCompanion<HomeworkItem> {
   final Value<String?> detail;
   final Value<String> status;
   final Value<String?> statusNote;
+  final Value<bool> attentionCleared;
   final Value<DateTime?> dueAt;
   final Value<DateTime?> statusChangedAt;
   final Value<DateTime> createdAt;
@@ -6989,6 +7138,7 @@ class HomeworkItemsCompanion extends UpdateCompanion<HomeworkItem> {
     this.detail = const Value.absent(),
     this.status = const Value.absent(),
     this.statusNote = const Value.absent(),
+    this.attentionCleared = const Value.absent(),
     this.dueAt = const Value.absent(),
     this.statusChangedAt = const Value.absent(),
     this.createdAt = const Value.absent(),
@@ -7004,6 +7154,7 @@ class HomeworkItemsCompanion extends UpdateCompanion<HomeworkItem> {
     this.detail = const Value.absent(),
     this.status = const Value.absent(),
     this.statusNote = const Value.absent(),
+    this.attentionCleared = const Value.absent(),
     this.dueAt = const Value.absent(),
     this.statusChangedAt = const Value.absent(),
     required DateTime createdAt,
@@ -7024,6 +7175,7 @@ class HomeworkItemsCompanion extends UpdateCompanion<HomeworkItem> {
     Expression<String>? detail,
     Expression<String>? status,
     Expression<String>? statusNote,
+    Expression<bool>? attentionCleared,
     Expression<DateTime>? dueAt,
     Expression<DateTime>? statusChangedAt,
     Expression<DateTime>? createdAt,
@@ -7039,6 +7191,7 @@ class HomeworkItemsCompanion extends UpdateCompanion<HomeworkItem> {
       if (detail != null) 'detail': detail,
       if (status != null) 'status': status,
       if (statusNote != null) 'status_note': statusNote,
+      if (attentionCleared != null) 'attention_cleared': attentionCleared,
       if (dueAt != null) 'due_at': dueAt,
       if (statusChangedAt != null) 'status_changed_at': statusChangedAt,
       if (createdAt != null) 'created_at': createdAt,
@@ -7056,6 +7209,7 @@ class HomeworkItemsCompanion extends UpdateCompanion<HomeworkItem> {
     Value<String?>? detail,
     Value<String>? status,
     Value<String?>? statusNote,
+    Value<bool>? attentionCleared,
     Value<DateTime?>? dueAt,
     Value<DateTime?>? statusChangedAt,
     Value<DateTime>? createdAt,
@@ -7071,6 +7225,7 @@ class HomeworkItemsCompanion extends UpdateCompanion<HomeworkItem> {
       detail: detail ?? this.detail,
       status: status ?? this.status,
       statusNote: statusNote ?? this.statusNote,
+      attentionCleared: attentionCleared ?? this.attentionCleared,
       dueAt: dueAt ?? this.dueAt,
       statusChangedAt: statusChangedAt ?? this.statusChangedAt,
       createdAt: createdAt ?? this.createdAt,
@@ -7108,6 +7263,9 @@ class HomeworkItemsCompanion extends UpdateCompanion<HomeworkItem> {
     if (statusNote.present) {
       map['status_note'] = Variable<String>(statusNote.value);
     }
+    if (attentionCleared.present) {
+      map['attention_cleared'] = Variable<bool>(attentionCleared.value);
+    }
     if (dueAt.present) {
       map['due_at'] = Variable<DateTime>(dueAt.value);
     }
@@ -7135,6 +7293,7 @@ class HomeworkItemsCompanion extends UpdateCompanion<HomeworkItem> {
           ..write('detail: $detail, ')
           ..write('status: $status, ')
           ..write('statusNote: $statusNote, ')
+          ..write('attentionCleared: $attentionCleared, ')
           ..write('dueAt: $dueAt, ')
           ..write('statusChangedAt: $statusChangedAt, ')
           ..write('createdAt: $createdAt, ')
@@ -7725,6 +7884,327 @@ class TeacherTodosCompanion extends UpdateCompanion<TeacherTodo> {
   }
 }
 
+class $StudentTopicProgressTable extends StudentTopicProgress
+    with TableInfo<$StudentTopicProgressTable, StudentTopicProgressData> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $StudentTopicProgressTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _studentIdMeta = const VerificationMeta(
+    'studentId',
+  );
+  @override
+  late final GeneratedColumn<String> studentId = GeneratedColumn<String>(
+    'student_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _labelMeta = const VerificationMeta('label');
+  @override
+  late final GeneratedColumn<String> label = GeneratedColumn<String>(
+    'label',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [id, studentId, label, createdAt];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'student_topic_progress';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<StudentTopicProgressData> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('student_id')) {
+      context.handle(
+        _studentIdMeta,
+        studentId.isAcceptableOrUnknown(data['student_id']!, _studentIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_studentIdMeta);
+    }
+    if (data.containsKey('label')) {
+      context.handle(
+        _labelMeta,
+        label.isAcceptableOrUnknown(data['label']!, _labelMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_labelMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  List<Set<GeneratedColumn>> get uniqueKeys => [
+    {studentId, label},
+  ];
+  @override
+  StudentTopicProgressData map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return StudentTopicProgressData(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      studentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}student_id'],
+      )!,
+      label: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}label'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+    );
+  }
+
+  @override
+  $StudentTopicProgressTable createAlias(String alias) {
+    return $StudentTopicProgressTable(attachedDatabase, alias);
+  }
+}
+
+class StudentTopicProgressData extends DataClass
+    implements Insertable<StudentTopicProgressData> {
+  final String id;
+  final String studentId;
+
+  /// Konu adı veya "Konu — Kazanım"
+  final String label;
+  final DateTime createdAt;
+  const StudentTopicProgressData({
+    required this.id,
+    required this.studentId,
+    required this.label,
+    required this.createdAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['student_id'] = Variable<String>(studentId);
+    map['label'] = Variable<String>(label);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    return map;
+  }
+
+  StudentTopicProgressCompanion toCompanion(bool nullToAbsent) {
+    return StudentTopicProgressCompanion(
+      id: Value(id),
+      studentId: Value(studentId),
+      label: Value(label),
+      createdAt: Value(createdAt),
+    );
+  }
+
+  factory StudentTopicProgressData.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return StudentTopicProgressData(
+      id: serializer.fromJson<String>(json['id']),
+      studentId: serializer.fromJson<String>(json['studentId']),
+      label: serializer.fromJson<String>(json['label']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'studentId': serializer.toJson<String>(studentId),
+      'label': serializer.toJson<String>(label),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+    };
+  }
+
+  StudentTopicProgressData copyWith({
+    String? id,
+    String? studentId,
+    String? label,
+    DateTime? createdAt,
+  }) => StudentTopicProgressData(
+    id: id ?? this.id,
+    studentId: studentId ?? this.studentId,
+    label: label ?? this.label,
+    createdAt: createdAt ?? this.createdAt,
+  );
+  StudentTopicProgressData copyWithCompanion(
+    StudentTopicProgressCompanion data,
+  ) {
+    return StudentTopicProgressData(
+      id: data.id.present ? data.id.value : this.id,
+      studentId: data.studentId.present ? data.studentId.value : this.studentId,
+      label: data.label.present ? data.label.value : this.label,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StudentTopicProgressData(')
+          ..write('id: $id, ')
+          ..write('studentId: $studentId, ')
+          ..write('label: $label, ')
+          ..write('createdAt: $createdAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(id, studentId, label, createdAt);
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is StudentTopicProgressData &&
+          other.id == this.id &&
+          other.studentId == this.studentId &&
+          other.label == this.label &&
+          other.createdAt == this.createdAt);
+}
+
+class StudentTopicProgressCompanion
+    extends UpdateCompanion<StudentTopicProgressData> {
+  final Value<String> id;
+  final Value<String> studentId;
+  final Value<String> label;
+  final Value<DateTime> createdAt;
+  final Value<int> rowid;
+  const StudentTopicProgressCompanion({
+    this.id = const Value.absent(),
+    this.studentId = const Value.absent(),
+    this.label = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  StudentTopicProgressCompanion.insert({
+    required String id,
+    required String studentId,
+    required String label,
+    required DateTime createdAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       studentId = Value(studentId),
+       label = Value(label),
+       createdAt = Value(createdAt);
+  static Insertable<StudentTopicProgressData> custom({
+    Expression<String>? id,
+    Expression<String>? studentId,
+    Expression<String>? label,
+    Expression<DateTime>? createdAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (studentId != null) 'student_id': studentId,
+      if (label != null) 'label': label,
+      if (createdAt != null) 'created_at': createdAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  StudentTopicProgressCompanion copyWith({
+    Value<String>? id,
+    Value<String>? studentId,
+    Value<String>? label,
+    Value<DateTime>? createdAt,
+    Value<int>? rowid,
+  }) {
+    return StudentTopicProgressCompanion(
+      id: id ?? this.id,
+      studentId: studentId ?? this.studentId,
+      label: label ?? this.label,
+      createdAt: createdAt ?? this.createdAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (studentId.present) {
+      map['student_id'] = Variable<String>(studentId.value);
+    }
+    if (label.present) {
+      map['label'] = Variable<String>(label.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('StudentTopicProgressCompanion(')
+          ..write('id: $id, ')
+          ..write('studentId: $studentId, ')
+          ..write('label: $label, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -7752,6 +8232,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $CurriculumOutcomesTable(this);
   late final $HomeworkItemsTable homeworkItems = $HomeworkItemsTable(this);
   late final $TeacherTodosTable teacherTodos = $TeacherTodosTable(this);
+  late final $StudentTopicProgressTable studentTopicProgress =
+      $StudentTopicProgressTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -7772,6 +8254,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     curriculumOutcomes,
     homeworkItems,
     teacherTodos,
+    studentTopicProgress,
   ];
 }
 
@@ -7787,6 +8270,7 @@ typedef $$StudentsTableCreateCompanionBuilder =
       Value<String?> guardianPhone,
       Value<String?> bookResource,
       Value<String?> bookResourcePractice,
+      Value<String?> gradeLevel,
       required DateTime createdAt,
       Value<int> rowid,
     });
@@ -7802,6 +8286,7 @@ typedef $$StudentsTableUpdateCompanionBuilder =
       Value<String?> guardianPhone,
       Value<String?> bookResource,
       Value<String?> bookResourcePractice,
+      Value<String?> gradeLevel,
       Value<DateTime> createdAt,
       Value<int> rowid,
     });
@@ -7862,6 +8347,11 @@ class $$StudentsTableFilterComposer
 
   ColumnFilters<String> get bookResourcePractice => $composableBuilder(
     column: $table.bookResourcePractice,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get gradeLevel => $composableBuilder(
+    column: $table.gradeLevel,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -7930,6 +8420,11 @@ class $$StudentsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get gradeLevel => $composableBuilder(
+    column: $table.gradeLevel,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -7985,6 +8480,11 @@ class $$StudentsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<String> get gradeLevel => $composableBuilder(
+    column: $table.gradeLevel,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 }
@@ -8027,6 +8527,7 @@ class $$StudentsTableTableManager
                 Value<String?> guardianPhone = const Value.absent(),
                 Value<String?> bookResource = const Value.absent(),
                 Value<String?> bookResourcePractice = const Value.absent(),
+                Value<String?> gradeLevel = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => StudentsCompanion(
@@ -8040,6 +8541,7 @@ class $$StudentsTableTableManager
                 guardianPhone: guardianPhone,
                 bookResource: bookResource,
                 bookResourcePractice: bookResourcePractice,
+                gradeLevel: gradeLevel,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -8055,6 +8557,7 @@ class $$StudentsTableTableManager
                 Value<String?> guardianPhone = const Value.absent(),
                 Value<String?> bookResource = const Value.absent(),
                 Value<String?> bookResourcePractice = const Value.absent(),
+                Value<String?> gradeLevel = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => StudentsCompanion.insert(
@@ -8068,6 +8571,7 @@ class $$StudentsTableTableManager
                 guardianPhone: guardianPhone,
                 bookResource: bookResource,
                 bookResourcePractice: bookResourcePractice,
+                gradeLevel: gradeLevel,
                 createdAt: createdAt,
                 rowid: rowid,
               ),
@@ -10283,6 +10787,7 @@ typedef $$CurriculumSubjectsTableCreateCompanionBuilder =
     CurriculumSubjectsCompanion Function({
       required String id,
       required String name,
+      Value<String> folder,
       Value<int> sortOrder,
       required DateTime createdAt,
       Value<int> rowid,
@@ -10291,6 +10796,7 @@ typedef $$CurriculumSubjectsTableUpdateCompanionBuilder =
     CurriculumSubjectsCompanion Function({
       Value<String> id,
       Value<String> name,
+      Value<String> folder,
       Value<int> sortOrder,
       Value<DateTime> createdAt,
       Value<int> rowid,
@@ -10312,6 +10818,11 @@ class $$CurriculumSubjectsTableFilterComposer
 
   ColumnFilters<String> get name => $composableBuilder(
     column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get folder => $composableBuilder(
+    column: $table.folder,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10345,6 +10856,11 @@ class $$CurriculumSubjectsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get folder => $composableBuilder(
+    column: $table.folder,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
     builder: (column) => ColumnOrderings(column),
@@ -10370,6 +10886,9 @@ class $$CurriculumSubjectsTableAnnotationComposer
 
   GeneratedColumn<String> get name =>
       $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<String> get folder =>
+      $composableBuilder(column: $table.folder, builder: (column) => column);
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
@@ -10420,12 +10939,14 @@ class $$CurriculumSubjectsTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
+                Value<String> folder = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => CurriculumSubjectsCompanion(
                 id: id,
                 name: name,
+                folder: folder,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
                 rowid: rowid,
@@ -10434,12 +10955,14 @@ class $$CurriculumSubjectsTableTableManager
               ({
                 required String id,
                 required String name,
+                Value<String> folder = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
                 required DateTime createdAt,
                 Value<int> rowid = const Value.absent(),
               }) => CurriculumSubjectsCompanion.insert(
                 id: id,
                 name: name,
+                folder: folder,
                 sortOrder: sortOrder,
                 createdAt: createdAt,
                 rowid: rowid,
@@ -11109,6 +11632,7 @@ typedef $$HomeworkItemsTableCreateCompanionBuilder =
       Value<String?> detail,
       Value<String> status,
       Value<String?> statusNote,
+      Value<bool> attentionCleared,
       Value<DateTime?> dueAt,
       Value<DateTime?> statusChangedAt,
       required DateTime createdAt,
@@ -11125,6 +11649,7 @@ typedef $$HomeworkItemsTableUpdateCompanionBuilder =
       Value<String?> detail,
       Value<String> status,
       Value<String?> statusNote,
+      Value<bool> attentionCleared,
       Value<DateTime?> dueAt,
       Value<DateTime?> statusChangedAt,
       Value<DateTime> createdAt,
@@ -11182,6 +11707,11 @@ class $$HomeworkItemsTableFilterComposer
 
   ColumnFilters<String> get statusNote => $composableBuilder(
     column: $table.statusNote,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get attentionCleared => $composableBuilder(
+    column: $table.attentionCleared,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11255,6 +11785,11 @@ class $$HomeworkItemsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get attentionCleared => $composableBuilder(
+    column: $table.attentionCleared,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get dueAt => $composableBuilder(
     column: $table.dueAt,
     builder: (column) => ColumnOrderings(column),
@@ -11311,6 +11846,11 @@ class $$HomeworkItemsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<bool> get attentionCleared => $composableBuilder(
+    column: $table.attentionCleared,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get dueAt =>
       $composableBuilder(column: $table.dueAt, builder: (column) => column);
 
@@ -11363,6 +11903,7 @@ class $$HomeworkItemsTableTableManager
                 Value<String?> detail = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<String?> statusNote = const Value.absent(),
+                Value<bool> attentionCleared = const Value.absent(),
                 Value<DateTime?> dueAt = const Value.absent(),
                 Value<DateTime?> statusChangedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -11377,6 +11918,7 @@ class $$HomeworkItemsTableTableManager
                 detail: detail,
                 status: status,
                 statusNote: statusNote,
+                attentionCleared: attentionCleared,
                 dueAt: dueAt,
                 statusChangedAt: statusChangedAt,
                 createdAt: createdAt,
@@ -11393,6 +11935,7 @@ class $$HomeworkItemsTableTableManager
                 Value<String?> detail = const Value.absent(),
                 Value<String> status = const Value.absent(),
                 Value<String?> statusNote = const Value.absent(),
+                Value<bool> attentionCleared = const Value.absent(),
                 Value<DateTime?> dueAt = const Value.absent(),
                 Value<DateTime?> statusChangedAt = const Value.absent(),
                 required DateTime createdAt,
@@ -11407,6 +11950,7 @@ class $$HomeworkItemsTableTableManager
                 detail: detail,
                 status: status,
                 statusNote: statusNote,
+                attentionCleared: attentionCleared,
                 dueAt: dueAt,
                 statusChangedAt: statusChangedAt,
                 createdAt: createdAt,
@@ -11719,6 +12263,203 @@ typedef $$TeacherTodosTableProcessedTableManager =
       TeacherTodo,
       PrefetchHooks Function()
     >;
+typedef $$StudentTopicProgressTableCreateCompanionBuilder =
+    StudentTopicProgressCompanion Function({
+      required String id,
+      required String studentId,
+      required String label,
+      required DateTime createdAt,
+      Value<int> rowid,
+    });
+typedef $$StudentTopicProgressTableUpdateCompanionBuilder =
+    StudentTopicProgressCompanion Function({
+      Value<String> id,
+      Value<String> studentId,
+      Value<String> label,
+      Value<DateTime> createdAt,
+      Value<int> rowid,
+    });
+
+class $$StudentTopicProgressTableFilterComposer
+    extends Composer<_$AppDatabase, $StudentTopicProgressTable> {
+  $$StudentTopicProgressTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get studentId => $composableBuilder(
+    column: $table.studentId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$StudentTopicProgressTableOrderingComposer
+    extends Composer<_$AppDatabase, $StudentTopicProgressTable> {
+  $$StudentTopicProgressTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get studentId => $composableBuilder(
+    column: $table.studentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get label => $composableBuilder(
+    column: $table.label,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$StudentTopicProgressTableAnnotationComposer
+    extends Composer<_$AppDatabase, $StudentTopicProgressTable> {
+  $$StudentTopicProgressTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get studentId =>
+      $composableBuilder(column: $table.studentId, builder: (column) => column);
+
+  GeneratedColumn<String> get label =>
+      $composableBuilder(column: $table.label, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+}
+
+class $$StudentTopicProgressTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $StudentTopicProgressTable,
+          StudentTopicProgressData,
+          $$StudentTopicProgressTableFilterComposer,
+          $$StudentTopicProgressTableOrderingComposer,
+          $$StudentTopicProgressTableAnnotationComposer,
+          $$StudentTopicProgressTableCreateCompanionBuilder,
+          $$StudentTopicProgressTableUpdateCompanionBuilder,
+          (
+            StudentTopicProgressData,
+            BaseReferences<
+              _$AppDatabase,
+              $StudentTopicProgressTable,
+              StudentTopicProgressData
+            >,
+          ),
+          StudentTopicProgressData,
+          PrefetchHooks Function()
+        > {
+  $$StudentTopicProgressTableTableManager(
+    _$AppDatabase db,
+    $StudentTopicProgressTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$StudentTopicProgressTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$StudentTopicProgressTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$StudentTopicProgressTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> studentId = const Value.absent(),
+                Value<String> label = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => StudentTopicProgressCompanion(
+                id: id,
+                studentId: studentId,
+                label: label,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String studentId,
+                required String label,
+                required DateTime createdAt,
+                Value<int> rowid = const Value.absent(),
+              }) => StudentTopicProgressCompanion.insert(
+                id: id,
+                studentId: studentId,
+                label: label,
+                createdAt: createdAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$StudentTopicProgressTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $StudentTopicProgressTable,
+      StudentTopicProgressData,
+      $$StudentTopicProgressTableFilterComposer,
+      $$StudentTopicProgressTableOrderingComposer,
+      $$StudentTopicProgressTableAnnotationComposer,
+      $$StudentTopicProgressTableCreateCompanionBuilder,
+      $$StudentTopicProgressTableUpdateCompanionBuilder,
+      (
+        StudentTopicProgressData,
+        BaseReferences<
+          _$AppDatabase,
+          $StudentTopicProgressTable,
+          StudentTopicProgressData
+        >,
+      ),
+      StudentTopicProgressData,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -11753,4 +12494,6 @@ class $AppDatabaseManager {
       $$HomeworkItemsTableTableManager(_db, _db.homeworkItems);
   $$TeacherTodosTableTableManager get teacherTodos =>
       $$TeacherTodosTableTableManager(_db, _db.teacherTodos);
+  $$StudentTopicProgressTableTableManager get studentTopicProgress =>
+      $$StudentTopicProgressTableTableManager(_db, _db.studentTopicProgress);
 }

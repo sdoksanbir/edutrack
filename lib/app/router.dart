@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ozel_ders_takip/data/local/app_database.dart';
+import 'package:ozel_ders_takip/features/auth/auth_providers.dart';
+import 'package:ozel_ders_takip/features/auth/login_screen.dart';
 import 'package:ozel_ders_takip/features/home/home_screen.dart';
 import 'package:ozel_ders_takip/features/students/students_screen.dart';
 import 'package:ozel_ders_takip/features/students/students_detail_screen.dart';
 import 'package:ozel_ders_takip/features/students/student_schedule_editor_screen.dart';
+import 'package:ozel_ders_takip/features/students/student_completed_topics_screen.dart';
 import 'package:ozel_ders_takip/features/schedule/schedule_screen.dart';
 import 'package:ozel_ders_takip/features/lessons/lessons_screen.dart';
 import 'package:ozel_ders_takip/features/lessons/lesson_create_screen.dart';
@@ -20,11 +23,15 @@ import 'package:ozel_ders_takip/features/payments/student_payment_detail_screen.
 import 'package:ozel_ders_takip/features/payments/guardian_payment_report_screen.dart';
 import 'package:ozel_ders_takip/features/settings/settings_screen.dart';
 import 'package:ozel_ders_takip/features/settings/parameters_screen.dart';
+import 'package:ozel_ders_takip/features/settings/profile_screen.dart';
 import 'package:ozel_ders_takip/features/todos/todos_screen.dart';
+import 'package:ozel_ders_takip/services/supabase_client.dart';
 import 'package:ozel_ders_takip/shared/models/daily_lesson.dart';
 import 'package:ozel_ders_takip/shared/theme/app_theme.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AppRouter {
+  static const String login = '/login';
   static const String home = '/home';
   static const String students = '/students';
   static const String schedule = '/schedule';
@@ -34,189 +41,248 @@ class AppRouter {
   static const String settings = '/settings';
   static const String settingsParameters = '/settings/parametreler';
   static const String todos = '/settings/yapilacaklar';
+  static const String profile = '/settings/profil';
 
-  static GoRouter get router => _router;
+  static GoRouterRefreshStream? _authRefresh;
+  static GoRouter? _router;
 
-  static final _router = GoRouter(
-    initialLocation: home,
-    routes: [
-      ShellRoute(
-        builder: (context, state, child) {
-          return MainNavigationShell(child: child);
-        },
-        routes: [
-          GoRoute(
-            path: home,
-            builder: (context, state) => const HomeScreen(),
-          ),
-          GoRoute(
-            path: students,
-            builder: (context, state) => const StudentsScreen(),
-          ),
-          GoRoute(
-            path: '$students/:id',
-            builder: (context, state) {
-              final student = state.extra as Student?;
-              if (student == null) {
-                // Eğer extra yoksa, ID'den öğrenciyi yükle
-                // Şimdilik basit bir hata mesajı göster
-                return const Scaffold(
-                  body: Center(child: Text('Öğrenci bulunamadı')),
-                );
-              }
-              return StudentsDetailScreen(student: student);
-            },
-            routes: [
-              GoRoute(
-                path: 'schedule',
-                builder: (context, state) {
-                  final studentId = state.extra as String? ?? 
-                      state.pathParameters['id'] ?? '';
-                  return StudentScheduleEditorScreen(studentId: studentId);
-                },
-              ),
-            ],
-          ),
-          GoRoute(
-            path: schedule,
-            builder: (context, state) => const ScheduleScreen(),
-          ),
-          GoRoute(
-            path: lessons,
-            builder: (context, state) => const LessonsScreen(),
-            routes: [
-              GoRoute(
-                path: 'student/:studentId',
-                builder: (context, state) {
-                  final studentId = state.pathParameters['studentId'] ?? '';
-                  final studentName = state.extra as String? ?? studentId;
-                  return StudentLessonsScreen(
-                    studentId: studentId,
-                    studentName: studentName,
+  /// [AppSupabase.init] sonrası çağır.
+  static void init() {
+    _authRefresh?.dispose();
+    _authRefresh = GoRouterRefreshStream(
+      AppSupabase.isReady
+          ? AppSupabase.client.auth.onAuthStateChange
+          : const Stream<AuthState>.empty(),
+    );
+
+    _router = GoRouter(
+      initialLocation: home,
+      refreshListenable: _authRefresh,
+      redirect: (context, state) {
+        if (!AppSupabase.isReady) return null;
+
+        final loggedIn = AppSupabase.client.auth.currentSession != null;
+        final onLogin = state.matchedLocation == login;
+
+        if (!loggedIn && !onLogin) return login;
+        // Recovery oturumunda önce yeni şifre belirlensin
+        if (loggedIn &&
+            onLogin &&
+            AuthService.pendingPasswordRecovery) {
+          return null;
+        }
+        if (loggedIn && onLogin) return home;
+        return null;
+      },
+      routes: [
+        GoRoute(
+          path: login,
+          builder: (context, state) => const LoginScreen(),
+        ),
+        ShellRoute(
+          builder: (context, state, child) {
+            return MainNavigationShell(child: child);
+          },
+          routes: [
+            GoRoute(
+              path: home,
+              builder: (context, state) => const HomeScreen(),
+            ),
+            GoRoute(
+              path: students,
+              builder: (context, state) => const StudentsScreen(),
+            ),
+            GoRoute(
+              path: '$students/:id',
+              builder: (context, state) {
+                final student = state.extra as Student?;
+                if (student == null) {
+                  return const Scaffold(
+                    body: Center(child: Text('Öğrenci bulunamadı')),
                   );
-                },
-              ),
-              GoRoute(
-                path: 'create',
-                builder: (context, state) {
-                  final dailyLesson = state.extra as DailyLesson?;
-                  if (dailyLesson == null) {
-                    return const Scaffold(
-                      body: Center(child: Text('Ders bilgisi bulunamadı')),
-                    );
-                  }
-                  return LessonCreateScreen(dailyLesson: dailyLesson);
-                },
-              ),
-              GoRoute(
-                path: ':id',
-                builder: (context, state) {
-                  // extra bir Map olabilir (lesson + scrollToPayments) veya direkt Lesson
-                  dynamic extra = state.extra;
-                  Lesson? lesson;
-                  bool scrollToPayments = false;
-                  
-                  if (extra is Map) {
-                    lesson = extra['lesson'] as Lesson?;
-                    scrollToPayments = extra['scrollToPayments'] as bool? ?? false;
-                  } else if (extra is Lesson) {
-                    lesson = extra;
-                  }
-                  
-                  if (lesson == null) {
-                    return const Scaffold(
-                      body: Center(child: Text('Ders bulunamadı')),
-                    );
-                  }
-                  return LessonDetailScreen(
-                    lesson: lesson,
-                    scrollToPayments: scrollToPayments,
-                  );
-                },
-              ),
-            ],
-          ),
-          GoRoute(
-            path: homeworks,
-            builder: (context, state) => const HomeworkScreen(),
-            routes: [
-              GoRoute(
-                path: 'student/:studentId',
-                builder: (context, state) {
-                  final studentId = state.pathParameters['studentId'] ?? '';
-                  final studentName = state.extra as String? ?? studentId;
-                  return StudentHomeworkScreen(
-                    studentId: studentId,
-                    studentName: studentName,
-                  );
-                },
-                routes: [
-                  GoRoute(
-                    path: 'lesson/:lessonId',
-                    builder: (context, state) {
-                      final studentId =
-                          state.pathParameters['studentId'] ?? '';
-                      final lessonId = state.pathParameters['lessonId'] ?? '';
-                      final extra = state.extra as Map<String, dynamic>?;
-                      final studentName =
-                          extra?['studentName'] as String? ?? studentId;
-                      final assignedAt =
-                          extra?['assignedAt'] as DateTime? ?? DateTime.now();
-                      final attentionOnly =
-                          extra?['attentionOnly'] as bool? ?? false;
-                      return LessonHomeworkScreen(
-                        studentId: studentId,
-                        studentName: studentName,
-                        lessonId: lessonId,
-                        assignedAt: assignedAt,
-                        attentionOnly: attentionOnly,
+                }
+                return StudentsDetailScreen(student: student);
+              },
+              routes: [
+                GoRoute(
+                  path: 'schedule',
+                  builder: (context, state) {
+                    final studentId = state.extra as String? ??
+                        state.pathParameters['id'] ??
+                        '';
+                    return StudentScheduleEditorScreen(studentId: studentId);
+                  },
+                ),
+                GoRoute(
+                  path: 'completed-topics',
+                  builder: (context, state) {
+                    final student = state.extra as Student?;
+                    if (student == null) {
+                      return const Scaffold(
+                        body: Center(child: Text('Öğrenci bulunamadı')),
                       );
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-          GoRoute(
-            path: payments,
-            builder: (context, state) => const PaymentsScreen(),
-            routes: [
-              GoRoute(
-                path: ':studentId',
-                builder: (context, state) {
-                  final studentId = state.pathParameters['studentId'] ?? '';
-                  return StudentPaymentDetailScreen(studentId: studentId);
-                },
-                routes: [
-                  GoRoute(
-                    path: 'report',
-                    builder: (context, state) {
-                      final studentId = state.pathParameters['studentId'] ?? '';
-                      return GuardianPaymentReportScreen(studentId: studentId);
-                    },
-                  ),
-                ],
-              ),
-            ],
-          ),
-          GoRoute(
-            path: settings,
-            builder: (context, state) => const SettingsScreen(),
-            routes: [
-              GoRoute(
-                path: 'parametreler',
-                builder: (context, state) => const ParametersScreen(),
-              ),
-              GoRoute(
-                path: 'yapilacaklar',
-                builder: (context, state) => const TodosScreen(),
-              ),
-            ],
-          ),
-        ],
-      ),
-    ],
-  );
+                    }
+                    return StudentCompletedTopicsScreen(student: student);
+                  },
+                ),
+              ],
+            ),
+            GoRoute(
+              path: schedule,
+              builder: (context, state) => const ScheduleScreen(),
+            ),
+            GoRoute(
+              path: lessons,
+              builder: (context, state) => const LessonsScreen(),
+              routes: [
+                GoRoute(
+                  path: 'student/:studentId',
+                  builder: (context, state) {
+                    final studentId = state.pathParameters['studentId'] ?? '';
+                    final studentName = state.extra as String? ?? studentId;
+                    return StudentLessonsScreen(
+                      studentId: studentId,
+                      studentName: studentName,
+                    );
+                  },
+                ),
+                GoRoute(
+                  path: 'create',
+                  builder: (context, state) {
+                    final dailyLesson = state.extra as DailyLesson?;
+                    if (dailyLesson == null) {
+                      return const Scaffold(
+                        body: Center(child: Text('Ders bilgisi bulunamadı')),
+                      );
+                    }
+                    return LessonCreateScreen(dailyLesson: dailyLesson);
+                  },
+                ),
+                GoRoute(
+                  path: ':id',
+                  builder: (context, state) {
+                    dynamic extra = state.extra;
+                    Lesson? lesson;
+                    bool scrollToPayments = false;
+
+                    if (extra is Map) {
+                      lesson = extra['lesson'] as Lesson?;
+                      scrollToPayments =
+                          extra['scrollToPayments'] as bool? ?? false;
+                    } else if (extra is Lesson) {
+                      lesson = extra;
+                    }
+
+                    if (lesson == null) {
+                      return const Scaffold(
+                        body: Center(child: Text('Ders bulunamadı')),
+                      );
+                    }
+                    return LessonDetailScreen(
+                      lesson: lesson,
+                      scrollToPayments: scrollToPayments,
+                    );
+                  },
+                ),
+              ],
+            ),
+            GoRoute(
+              path: homeworks,
+              builder: (context, state) => const HomeworkScreen(),
+              routes: [
+                GoRoute(
+                  path: 'student/:studentId',
+                  builder: (context, state) {
+                    final studentId = state.pathParameters['studentId'] ?? '';
+                    final studentName = state.extra as String? ?? studentId;
+                    return StudentHomeworkScreen(
+                      studentId: studentId,
+                      studentName: studentName,
+                    );
+                  },
+                  routes: [
+                    GoRoute(
+                      path: 'lesson/:lessonId',
+                      builder: (context, state) {
+                        final studentId =
+                            state.pathParameters['studentId'] ?? '';
+                        final lessonId = state.pathParameters['lessonId'] ?? '';
+                        final extra = state.extra as Map<String, dynamic>?;
+                        final studentName =
+                            extra?['studentName'] as String? ?? studentId;
+                        final assignedAt =
+                            extra?['assignedAt'] as DateTime? ?? DateTime.now();
+                        final attentionOnly =
+                            extra?['attentionOnly'] as bool? ?? false;
+                        return LessonHomeworkScreen(
+                          studentId: studentId,
+                          studentName: studentName,
+                          lessonId: lessonId,
+                          assignedAt: assignedAt,
+                          attentionOnly: attentionOnly,
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            GoRoute(
+              path: payments,
+              builder: (context, state) => const PaymentsScreen(),
+              routes: [
+                GoRoute(
+                  path: ':studentId',
+                  builder: (context, state) {
+                    final studentId = state.pathParameters['studentId'] ?? '';
+                    return StudentPaymentDetailScreen(studentId: studentId);
+                  },
+                  routes: [
+                    GoRoute(
+                      path: 'report',
+                      builder: (context, state) {
+                        final studentId =
+                            state.pathParameters['studentId'] ?? '';
+                        return GuardianPaymentReportScreen(
+                          studentId: studentId,
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            GoRoute(
+              path: settings,
+              builder: (context, state) => const SettingsScreen(),
+              routes: [
+                GoRoute(
+                  path: 'profil',
+                  builder: (context, state) => const ProfileScreen(),
+                ),
+                GoRoute(
+                  path: 'parametreler',
+                  builder: (context, state) => const ParametersScreen(),
+                ),
+                GoRoute(
+                  path: 'yapilacaklar',
+                  builder: (context, state) => const TodosScreen(),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  static GoRouter get router {
+    final r = _router;
+    if (r == null) {
+      throw StateError('AppRouter.init() main içinde çağrılmalı.');
+    }
+    return r;
+  }
 }
 
 class MainNavigationShell extends ConsumerWidget {

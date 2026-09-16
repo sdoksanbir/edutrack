@@ -36,10 +36,15 @@ Color homeworkStatusColor(String status) {
   }
 }
 
-bool homeworkItemNeedsAttention(HomeworkItem item, {String? statusOverride}) =>
+bool homeworkItemNeedsAttention(
+  HomeworkItem item, {
+  String? statusOverride,
+  bool? attentionClearedOverride,
+}) =>
     HomeworkStatus.needsAttention(
       statusOverride ?? item.status,
       item.dueAt,
+      attentionCleared: attentionClearedOverride ?? item.attentionCleared,
     );
 
 bool homeworkItemIsOverdue(HomeworkItem item) =>

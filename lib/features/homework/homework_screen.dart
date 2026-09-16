@@ -5,6 +5,7 @@ import 'package:ozel_ders_takip/app/router.dart';
 import 'package:ozel_ders_takip/data/local/app_database.dart';
 import 'package:ozel_ders_takip/data/providers/repositories_provider.dart';
 import 'package:ozel_ders_takip/data/repositories/homework_repo.dart';
+import 'package:ozel_ders_takip/features/homework/widgets/extra_homework_sheet.dart';
 import 'package:ozel_ders_takip/shared/i18n/strings_tr.dart';
 import 'package:ozel_ders_takip/shared/theme/app_theme.dart';
 
@@ -105,6 +106,11 @@ class _HomeworkScreenState extends ConsumerState<HomeworkScreen> {
             ),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => showExtraHomeworkSheet(context, ref),
+        icon: const Icon(Icons.note_add_outlined),
+        label: const Text(StringsTr.extraHomeworkTitle),
       ),
     );
   }

@@ -8,13 +8,22 @@ import 'package:ozel_ders_takip/app/router.dart';
 import 'package:ozel_ders_takip/data/local/app_database.dart';
 import 'package:ozel_ders_takip/data/repositories/app_settings_repo.dart';
 import 'package:ozel_ders_takip/data/repositories/schedule_repo.dart';
+import 'package:ozel_ders_takip/features/auth/cloud_session_bootstrap.dart';
 import 'package:ozel_ders_takip/services/notification_service.dart';
+import 'package:ozel_ders_takip/services/supabase_client.dart';
 import 'package:ozel_ders_takip/shared/theme/app_theme.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+String? get _currentDbUserId =>
+    AppSupabase.isReady ? AppSupabase.client.auth.currentUser?.id : null;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('tr_TR', null);
+
+  // Bulut (opsiyonel): --dart-define=SUPABASE_URL / SUPABASE_ANON_KEY
+  await AppSupabase.init();
+  AppRouter.init();
 
   // Koyu tema: sistem çubuğu ikonları açık renkte
   SystemChrome.setSystemUIOverlayStyle(
@@ -86,7 +95,7 @@ Future<void> main() async {
 // ignore: unused_element
 Future<void> _checkUpcomingLessonsInBackground() async {
   try {
-    final db = AppDatabase();
+    final db = AppDatabase(userId: _currentDbUserId);
     final scheduleRepo = ScheduleRepository(db);
     final notificationService = NotificationService();
     await notificationService.init();
@@ -150,7 +159,7 @@ Future<void> _checkUpcomingLessonsInBackground() async {
 /// İlk açılışta varsayılan bitiş tarihini kontrol et ve oluştur
 Future<void> _initializeDefaultScheduleEndDate() async {
   try {
-    final db = AppDatabase();
+    final db = AppDatabase(userId: _currentDbUserId);
     final settingsRepo = AppSettingsRepository(db);
     
     // getDefaultScheduleEndDate() zaten yoksa otomatik oluşturuyor (1 yıl sonrası)
@@ -164,7 +173,7 @@ Future<void> _initializeDefaultScheduleEndDate() async {
 Future<void> _initializeDailySummaryNotification() async {
   try {
     // Database ve repository'leri oluştur
-    final db = AppDatabase();
+    final db = AppDatabase(userId: _currentDbUserId);
     final settingsRepo = AppSettingsRepository(db);
     final scheduleRepo = ScheduleRepository(db);
     
@@ -214,7 +223,7 @@ Future<void> _initializeDailySummaryNotification() async {
 /// Gelecek 7 gün için tüm derslerin bildirimlerini planlar
 Future<void> _scheduleAllUpcomingLessons() async {
   try {
-    final db = AppDatabase();
+    final db = AppDatabase(userId: _currentDbUserId);
     final scheduleRepo = ScheduleRepository(db);
     final notificationService = NotificationService();
     
@@ -269,14 +278,14 @@ Future<void> _scheduleAllUpcomingLessons() async {
   }
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  ConsumerState<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   Timer? _notificationCheckTimer;
   final _notificationService = NotificationService();
 
@@ -297,17 +306,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Uygulama açıldığında bildirimleri kontrol et
       _checkUpcomingNotifications();
       _startNotificationCheck();
     } else if (state == AppLifecycleState.paused) {
-      // Uygulama arka plana gittiğinde timer'ı durdur
       _notificationCheckTimer?.cancel();
     }
   }
 
   void _startNotificationCheck() {
-    // Her 1 dakikada bir yaklaşan bildirimleri kontrol et
     _notificationCheckTimer?.cancel();
     _notificationCheckTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       _checkUpcomingNotifications();
@@ -316,18 +322,18 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   Future<void> _checkUpcomingNotifications() async {
     try {
-      final db = AppDatabase();
+      final db = AppDatabase(userId: _currentDbUserId);
       final scheduleRepo = ScheduleRepository(db);
       final now = DateTime.now();
-      
-      // Pending bildirimleri al
-      final pendingNotifications = await _notificationService.notifications.pendingNotificationRequests();
-      
-      // Bugün ve yarın için dersleri kontrol et
+
+      final pendingNotifications =
+          await _notificationService.notifications.pendingNotificationRequests();
+
       for (int i = 0; i < 2; i++) {
-        final targetDate = DateTime(now.year, now.month, now.day).add(Duration(days: i));
+        final targetDate =
+            DateTime(now.year, now.month, now.day).add(Duration(days: i));
         final lessons = await scheduleRepo.getEffectiveSchedule(targetDate);
-        
+
         for (final lesson in lessons) {
           if (lesson.status == 'planned' || lesson.status == null) {
             final timeParts = lesson.startTime.split(':');
@@ -338,14 +344,14 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               int.parse(timeParts[0]),
               int.parse(timeParts[1]),
             );
-            
-            // Bildirim zamanı = ders zamanı - 10 dakika
-            final notificationDateTime = lessonDateTime.subtract(const Duration(minutes: 10));
-            
-            // Eğer bildirim zamanı geçtiyse ama ders henüz gelmemişse bildirim göster
-            if (notificationDateTime.isBefore(now) && lessonDateTime.isAfter(now)) {
-              // Notification ID'yi hesapla (FNV-1a hash - notification_service ile aynı)
-              final dateStr = '${targetDate.year}${targetDate.month.toString().padLeft(2, '0')}${targetDate.day.toString().padLeft(2, '0')}';
+
+            final notificationDateTime =
+                lessonDateTime.subtract(const Duration(minutes: 10));
+
+            if (notificationDateTime.isBefore(now) &&
+                lessonDateTime.isAfter(now)) {
+              final dateStr =
+                  '${targetDate.year}${targetDate.month.toString().padLeft(2, '0')}${targetDate.day.toString().padLeft(2, '0')}';
               final input = '${lesson.templateId}|$dateStr';
               int hash = 2166136261;
               const int fnvPrime = 16777619;
@@ -354,15 +360,17 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
                 hash = (hash * fnvPrime) & 0xFFFFFFFF;
               }
               final notificationId = 100000 + (hash.abs() % 800000);
-              
-              // Eğer bu bildirim hala pending ise, manuel olarak göster
-              final isPending = pendingNotifications.any((n) => n.id == notificationId);
+
+              final isPending =
+                  pendingNotifications.any((n) => n.id == notificationId);
               if (isPending) {
-                print('🔄 Bildirim zamanı geçti, manuel olarak gösteriliyor: ${lesson.studentName} - ${lesson.startTime}');
+                print(
+                    '🔄 Bildirim zamanı geçti, manuel olarak gösteriliyor: ${lesson.studentName} - ${lesson.startTime}');
                 await _notificationService.triggerNotificationManually(
                   notificationId: notificationId,
                   title: 'Ders Hatırlatması',
-                  body: '${lesson.studentName} ile dersiniz yakında başlayacak (${lesson.startTime})',
+                  body:
+                      '${lesson.studentName} ile dersiniz yakında başlayacak (${lesson.startTime})',
                 );
               }
             }
@@ -376,11 +384,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(cloudSessionBootstrapProvider);
     final appTheme = AppTheme.dark;
     return MaterialApp.router(
       title: 'Özel Ders Takip',
       debugShowCheckedModeBanner: false,
-      // Koyu tema sabit — sistem açık tema tercihinden etkilenmesin
       themeMode: ThemeMode.dark,
       theme: appTheme,
       darkTheme: appTheme,
@@ -413,3 +421,4 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
     );
   }
 }
+

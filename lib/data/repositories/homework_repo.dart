@@ -29,8 +29,15 @@ class LessonHomeworkGroup {
 
   int get itemCount => items.length;
 
-  int get alertCount =>
-      items.where((i) => HomeworkStatus.needsAttention(i.status, i.dueAt)).length;
+  int get alertCount => items
+      .where(
+        (i) => HomeworkStatus.needsAttention(
+          i.status,
+          i.dueAt,
+          attentionCleared: i.attentionCleared,
+        ),
+      )
+      .length;
 
   DateTime? get earliestDue {
     DateTime? earliest;
@@ -66,6 +73,27 @@ class HomeworkRepository {
         .watch();
   }
 
+  /// Kaynak adına göre daha önce verilmiş deneme numaraları.
+  Future<Map<String, Set<int>>> getAssignedDenemeNumbers(
+    String studentId,
+  ) async {
+    final items = await (_db.select(_db.homeworkItems)
+          ..where((h) => h.studentId.equals(studentId)))
+        .get();
+    final map = <String, Set<int>>{};
+    final re = RegExp(r'^Deneme\s+(\d+)$', caseSensitive: false);
+    for (final item in items) {
+      final resource = item.resource?.trim();
+      if (resource == null || resource.isEmpty) continue;
+      final match = re.firstMatch(item.topic.trim());
+      if (match == null) continue;
+      final no = int.tryParse(match.group(1)!);
+      if (no == null) continue;
+      map.putIfAbsent(resource, () => <int>{}).add(no);
+    }
+    return map;
+  }
+
   Stream<List<LessonHomeworkGroup>> watchLessonGroupsByStudent(String studentId) {
     return watchByStudent(studentId).map(groupHomeworkByLesson);
   }
@@ -95,8 +123,12 @@ class HomeworkRepository {
     return watchAllItems()
         .map((items) => items
             .where((item) =>
-                HomeworkStatus.needsAttention(item.status, item.dueAt))
-            .length)
+                HomeworkStatus.needsAttention(
+                  item.status,
+                  item.dueAt,
+                  attentionCleared: item.attentionCleared,
+                ))
+        .length)
         .distinct();
   }
 
@@ -105,7 +137,11 @@ class HomeworkRepository {
       final map = <String, StudentHomeworkSummary>{};
       for (final item in items) {
         final current = map[item.studentId];
-        final alert = HomeworkStatus.needsAttention(item.status, item.dueAt);
+        final alert = HomeworkStatus.needsAttention(
+          item.status,
+          item.dueAt,
+          attentionCleared: item.attentionCleared,
+        );
         if (current == null) {
           map[item.studentId] = StudentHomeworkSummary(
             studentId: item.studentId,
@@ -148,6 +184,7 @@ class HomeworkRepository {
     required String itemId,
     required String status,
     String? statusNote,
+    bool? attentionCleared,
   }) async {
     await (_db.update(_db.homeworkItems)..where((h) => h.id.equals(itemId)))
         .write(
@@ -155,8 +192,23 @@ class HomeworkRepository {
         status: Value(status),
         statusNote:
             statusNote != null ? Value(statusNote) : const Value.absent(),
+        attentionCleared: attentionCleared != null
+            ? Value(attentionCleared)
+            : status == HomeworkStatus.notUnderstood
+                ? const Value.absent()
+                : const Value(false),
         statusChangedAt: Value(DateTime.now()),
       ),
+    );
+  }
+
+  Future<void> updateAttentionCleared({
+    required String itemId,
+    required bool cleared,
+  }) async {
+    await (_db.update(_db.homeworkItems)..where((h) => h.id.equals(itemId)))
+        .write(
+      HomeworkItemsCompanion(attentionCleared: Value(cleared)),
     );
   }
 
@@ -353,5 +405,89 @@ class HomeworkRepository {
         });
       }
     });
+  }
+
+  /// Ödev sayfasından ders dışı / ekstra ödev ekler.
+  /// [homework] / [homeworkResource] ders ödev alanlarıyla aynı kodlamayı kullanır.
+  Future<String> addExtraHomework({
+    required String studentId,
+    String? homework,
+    String? homeworkResource,
+    DateTime? dueAt,
+    String? topic,
+    String? resource,
+    String? detail,
+  }) async {
+    final drafts = <HomeworkItemDraft>[
+      ...expandHomeworkItems(
+        homeworkResource: homeworkResource,
+        homework: homework,
+      ),
+    ];
+
+    // Eski tek alanlı çağrılar için geriye dönük destek
+    if (drafts.isEmpty && topic != null && topic.trim().isNotEmpty) {
+      drafts.add(
+        HomeworkItemDraft(
+          resource: resource?.trim().isEmpty == true ? null : resource?.trim(),
+          topic: topic.trim(),
+          detail: detail?.trim().isEmpty == true ? null : detail?.trim(),
+        ),
+      );
+    }
+
+    if (drafts.isEmpty) {
+      throw ArgumentError('En az bir ödev seçin veya yazın');
+    }
+
+    final now = DateTime.now();
+    final lessonId = _uuid.v4();
+    final assignedAt =
+        DateTime(now.year, now.month, now.day, now.hour, now.minute);
+    final effectiveDue = dueAt ?? HomeworkStatus.defaultDueDate(assignedAt);
+
+    final encodedResource = (homeworkResource != null &&
+            homeworkResource.trim().isNotEmpty)
+        ? homeworkResource.trim()
+        : null;
+    final encodedHomework =
+        (homework != null && homework.trim().isNotEmpty) ? homework.trim() : null;
+
+    await _db.transaction(() async {
+      await _db.into(_db.lessons).insert(
+            LessonsCompanion.insert(
+              id: lessonId,
+              studentId: studentId,
+              startDateTime: assignedAt,
+              durationMin: 0,
+              topic: const Value('Ekstra ödev'),
+              homework: Value(encodedHomework),
+              homeworkResource: Value(encodedResource),
+              feeExpected: 0,
+              feePaidAmount: 0,
+              note: const Value('Ekstra ödev'),
+              createdAt: now,
+            ),
+          );
+
+      for (final draft in drafts) {
+        await _db.into(_db.homeworkItems).insert(
+              HomeworkItemsCompanion.insert(
+                id: _uuid.v4(),
+                lessonId: lessonId,
+                studentId: studentId,
+                assignedAt: assignedAt,
+                resource: Value(draft.resource),
+                topic: draft.topic,
+                detail: Value(draft.detail),
+                status: const Value(HomeworkStatus.pending),
+                dueAt: Value(effectiveDue),
+                createdAt: now,
+              ),
+            );
+      }
+    });
+
+    return lessonId;
   }
 }

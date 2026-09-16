@@ -23,6 +23,7 @@ class HomeworkItemTile extends ConsumerStatefulWidget {
 
 class _HomeworkItemTileState extends ConsumerState<HomeworkItemTile> {
   late String _status;
+  late bool _attentionCleared;
   final _noteController = TextEditingController();
 
   static const _options = [
@@ -62,6 +63,7 @@ class _HomeworkItemTileState extends ConsumerState<HomeworkItemTile> {
   void initState() {
     super.initState();
     _status = widget.item.status;
+    _attentionCleared = widget.item.attentionCleared;
     _noteController.text = widget.item.statusNote ?? '';
   }
 
@@ -71,6 +73,10 @@ class _HomeworkItemTileState extends ConsumerState<HomeworkItemTile> {
     if (oldWidget.item.id != widget.item.id ||
         oldWidget.item.status != widget.item.status) {
       _status = widget.item.status;
+    }
+    if (oldWidget.item.id != widget.item.id ||
+        oldWidget.item.attentionCleared != widget.item.attentionCleared) {
+      _attentionCleared = widget.item.attentionCleared;
     }
     if (oldWidget.item.id != widget.item.id ||
         oldWidget.item.statusNote != widget.item.statusNote) {
@@ -86,13 +92,26 @@ class _HomeworkItemTileState extends ConsumerState<HomeworkItemTile> {
 
   Future<void> _saveStatus(String status) async {
     if (_status == status) return;
-    setState(() => _status = status);
+    setState(() {
+      _status = status;
+      if (status != HomeworkStatus.notUnderstood) {
+        _attentionCleared = false;
+      }
+    });
     await ref.read(homeworkRepoProvider).updateStatus(
           itemId: widget.item.id,
           status: status,
           statusNote: _noteController.text.trim().isEmpty
               ? null
               : _noteController.text.trim(),
+        );
+  }
+
+  Future<void> _setAttentionCleared(bool cleared) async {
+    setState(() => _attentionCleared = cleared);
+    await ref.read(homeworkRepoProvider).updateAttentionCleared(
+          itemId: widget.item.id,
+          cleared: cleared,
         );
   }
 
@@ -145,14 +164,37 @@ class _HomeworkItemTileState extends ConsumerState<HomeworkItemTile> {
     }
 
     final studentName = await _resolveStudentName();
-
-    await ref.read(todosRepoProvider).addTodo(
+    final added = await ref.read(todosRepoProvider).addTodoFromHomework(
           title: note,
           studentId: widget.item.studentId,
           studentName: studentName,
           homeworkItemId: widget.item.id,
           homeworkTopic: widget.item.topic,
         );
+
+    if (!mounted) return;
+
+    if (!added) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          icon: const Icon(
+            Icons.info_outline_rounded,
+            color: AppColors.primary,
+            size: 36,
+          ),
+          title: const Text(StringsTr.todosAlreadyAddedTitle),
+          content: const Text(StringsTr.todosAlreadyAddedBody),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text(StringsTr.ok),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
     await _saveStatus(_status);
 
@@ -222,8 +264,11 @@ class _HomeworkItemTileState extends ConsumerState<HomeworkItemTile> {
   @override
   Widget build(BuildContext context) {
     final item = widget.item;
-    final needsAttention =
-        homeworkItemNeedsAttention(item, statusOverride: _status);
+    final needsAttention = homeworkItemNeedsAttention(
+      item,
+      statusOverride: _status,
+      attentionClearedOverride: _attentionCleared,
+    );
     final statusColor = homeworkStatusColor(_status);
     final showExtension = _status == HomeworkStatus.partial ||
         _status == HomeworkStatus.notDone;
@@ -358,17 +403,51 @@ class _HomeworkItemTileState extends ConsumerState<HomeworkItemTile> {
                 },
               ),
               if (_status == HomeworkStatus.notUnderstood)
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton.icon(
-                    onPressed: _addToTodoList,
-                    icon: const Icon(Icons.check_circle_outline, size: 18),
-                    label: const Text(StringsTr.todosAddToList),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.success,
-                      visualDensity: VisualDensity.compact,
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () =>
+                            _setAttentionCleared(!_attentionCleared),
+                        borderRadius: BorderRadius.circular(8),
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 28,
+                              height: 28,
+                              child: Checkbox(
+                                value: _attentionCleared,
+                                onChanged: (v) =>
+                                    _setAttentionCleared(v ?? false),
+                                materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            const Flexible(
+                              child: Text(
+                                StringsTr.homeworkAttentionCleared,
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                    TextButton.icon(
+                      onPressed: _addToTodoList,
+                      icon: const Icon(Icons.check_circle_outline, size: 18),
+                      label: const Text(StringsTr.todosAddToList),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.success,
+                        visualDensity: VisualDensity.compact,
+                      ),
+                    ),
+                  ],
                 ),
             ],
           ],

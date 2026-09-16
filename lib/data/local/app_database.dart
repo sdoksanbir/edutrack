@@ -24,12 +24,23 @@ part 'app_database.g.dart';
   CurriculumOutcomes,
   HomeworkItems,
   TeacherTodos,
+  StudentTopicProgress,
 ])
 class AppDatabase extends _$AppDatabase {
-  AppDatabase() : super(_openConnection());
+  /// [userId] doluysa dosya `ozel_ders_takip_<uid>.sqlite` — hesaplar birbirinin
+  /// yerel öğrencilerini / ödemelerini görmez.
+  AppDatabase({String? userId}) : super(_openConnection(userId));
+
+  static const legacyFileName = 'ozel_ders_takip.sqlite';
+  static const legacyOwnerMarker = 'ozel_ders_takip.legacy_owner';
+
+  static String fileNameFor(String? userId) {
+    if (userId == null || userId.isEmpty) return legacyFileName;
+    return 'ozel_ders_takip_$userId.sqlite';
+  }
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 22;
 
   Future<bool> _columnExists(
     GeneratedDatabase db,
@@ -341,15 +352,97 @@ class AppDatabase extends _$AppDatabase {
             'INTEGER',
           );
         }
+        if (from < 19) {
+          await _addColumnIfMissing(
+            m.database,
+            'curriculum_subjects',
+            'folder',
+            "TEXT NOT NULL DEFAULT 'MATEMATİK'",
+          );
+          await customStatement(
+            "UPDATE curriculum_subjects SET folder = 'MATEMATİK' "
+            "WHERE folder IS NULL OR TRIM(folder) = ''",
+          );
+        }
+        if (from < 20) {
+          await _addColumnIfMissing(
+            m.database,
+            'homework_items',
+            'attention_cleared',
+            'INTEGER NOT NULL DEFAULT 0',
+          );
+        }
+        if (from < 21) {
+          await _addColumnIfMissing(
+            m.database,
+            'students',
+            'grade_level',
+            'TEXT',
+          );
+        }
+        if (from < 22) {
+          if (!await _tableExists(m.database, 'student_topic_progress')) {
+            await m.createTable(studentTopicProgress);
+          }
+        }
       },
     );
   }
+
+  /// Öğrenci / ders / ödeme / program / ödev / yapılacaklar temizler.
+  /// Profil (ad, telefon, foto, branş) ve müfredat seed’i kalır.
+  Future<void> clearBusinessData() async {
+    await transaction(() async {
+      final atts = await select(attachments).get();
+      for (final a in atts) {
+        try {
+          final f = File(a.filePath);
+          if (await f.exists()) await f.delete();
+        } catch (_) {}
+      }
+
+      await delete(lessonPayments).go();
+      await delete(attachments).go();
+      await delete(homeworkItems).go();
+      await delete(lessons).go();
+      await delete(sessionOccurrences).go();
+      await delete(scheduleOverrides).go();
+      await delete(scheduleTemplates).go();
+      await delete(payments).go();
+      await delete(teacherTodos).go();
+      await delete(studentTopicProgress).go();
+      await delete(students).go();
+    });
+  }
 }
 
-LazyDatabase _openConnection() {
+LazyDatabase _openConnection(String? userId) {
   return LazyDatabase(() async {
     final dbFolder = await getApplicationDocumentsDirectory();
-    final file = File(p.join(dbFolder.path, 'ozel_ders_takip.sqlite'));
-    return NativeDatabase(file);
+    final target = File(p.join(dbFolder.path, AppDatabase.fileNameFor(userId)));
+
+    // Eski tek dosyayı yalnızca ilk giriş yapan hesaba bir kez taşı.
+    if (userId != null &&
+        userId.isNotEmpty &&
+        !await target.exists()) {
+      final legacy =
+          File(p.join(dbFolder.path, AppDatabase.legacyFileName));
+      final claim =
+          File(p.join(dbFolder.path, AppDatabase.legacyOwnerMarker));
+      String? claimedBy;
+      if (await claim.exists()) {
+        claimedBy = (await claim.readAsString()).trim();
+      }
+      final canMigrate = await legacy.exists() &&
+          (claimedBy == null ||
+              claimedBy.isEmpty ||
+              claimedBy == userId);
+      if (canMigrate) {
+        await legacy.copy(target.path);
+        await claim.writeAsString(userId);
+      }
+    }
+
+    return NativeDatabase(target);
   });
 }

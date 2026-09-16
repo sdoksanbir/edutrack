@@ -60,6 +60,11 @@ abstract class StringsTr {
   static const String homeworksMenuTitle = 'Ödevler';
   static const String studentHomeworksTitle = 'Öğrenci Ödevleri';
   static const String noHomeworksYet = 'Henüz ödev kaydı yok';
+  static const String extraHomeworkTitle = 'Ekstra ödev';
+  static const String extraHomeworkSubtitle =
+      'Ders dışı ödev ekleyin; öğrenci listesinde görünür';
+  static const String extraHomeworkAdd = 'Ödev ekle';
+  static const String extraHomeworkAdded = 'Ekstra ödev eklendi';
   static const String homeworkStatusPending = 'Bekliyor';
   static const String homeworkStatusDone = 'Yapıldı';
   static const String homeworkStatusNotDone = 'Yapmadı';
@@ -71,6 +76,17 @@ abstract class StringsTr {
   static const String homeworkAlertCount = 'uyarı';
   static const String filterAllHomework = 'Tümü';
   static const String filterAttentionHomework = 'Takip Gereken';
+  static const String homeworkTabByLesson = 'Dersler';
+  static const String homeworkTabAllItems = 'Tüm ödevler';
+  static const String homeworkDateFilterWeek = 'Son 7 gün';
+  static const String homeworkDateFilterMonth = 'Bu ay';
+  static const String homeworkDateFilterCustom = 'Aralık seç';
+  static const String homeworkDateFilterRangeHelp = 'Tarih aralığı seç';
+  static const String homeworkDateFilterFrom = 'Başlangıç';
+  static const String homeworkDateFilterTo = 'Bitiş';
+  static const String homeworkDateFilterSave = 'Uygula';
+  static const String homeworkDateFilterClear = 'Temizle';
+  static const String homeworkNoItemsInRange = 'Bu tarih aralığında ödev yok';
   static const String assignedOn = 'Verildi';
   static const String homeworkDueDate = 'Bitiş tarihi';
   static const String homeworkDueOverdue = 'Süresi geçti';
@@ -88,8 +104,12 @@ abstract class StringsTr {
   static const String todosShowAll = 'Tamamlananları göster';
   static const String todosShowOpen = 'Sadece açık görevler';
   static const String todosAdded = 'Yapılacaklar listesine eklendi';
+  static const String todosAlreadyAddedTitle = 'Zaten listede';
+  static const String todosAlreadyAddedBody =
+      'Bu ödev yapılacaklar listesine daha önce eklenmiş. Tekrar eklenmedi.';
   static const String todosAddNoteFirst = 'Önce açıklama yazın';
   static const String todosAddToList = 'Listeye ekle';
+  static const String homeworkAttentionCleared = 'Gerekenler yapıldı';
   static const String todosEdit = 'Görevi düzenle';
   static const String todosUpdated = 'Görev güncellendi';
   static const String todosNotifyAt = 'Bildirim zamanı';
@@ -117,6 +137,16 @@ abstract class StringsTr {
   static const String newDateLabel = 'Yeni tarih';
   static const String noLessonsInCategory = 'Bu kategoride ders yok';
   static const String lastLessonDate = 'Son ders';
+  static const String completedTopicsTitle = 'Tamamlanan Konular';
+  static const String completedTopicsSubtitle =
+      'Müfredatta işlenen konuları görüntüle';
+  static const String completedTopicsEmpty =
+      'Henüz tamamlanan konu kaydı yok.\nDers kaydında anlatılan konular seçildiğinde burada görünür.';
+  static const String completedTopicsNoGrade = 'Sınıf seçilmedi';
+  static const String completedTopicsOther = 'Diğer / özel konular';
+  static const String completedTopicsTapHint =
+      'Konuya veya kazanıma dokunarak işaretleyin. Yeşil: tamam · Sarı: yarım.';
+  static const String completedTopicsPartialHint = 'Kısmen tamamlandı';
   static const String guardianSectionTitle = 'Veli Bilgileri';
   static const String guardianNameLabel = 'Veli Ad Soyad';
   static const String guardianPhoneLabel = 'Veli Telefon';
@@ -155,7 +185,9 @@ abstract class StringsTr {
   static const String topicsFromParameters = 'Parametrelerden konu seç';
   static const String topicAddedToSelection = 'Konu seçime eklendi';
   static const String multiSelectTopicsHint =
-      'Birden fazla konu seçebilirsiniz. Bitince Kaydet\'e basın.';
+      'Konu kutusu tüm kazanımları seçer. İsterseniz tek tek kazanım da işaretleyebilirsiniz.';
+  static const String topicSelectAllOutcomesHint =
+      'Konu seçildi — altındaki kazanımlar tamamlandı sayılır';
   static const String homeworkTopicNoteLabel = 'Sayfa / test / açıklama';
   static const String homeworkTopicNoteHint =
       'Örn. sf. 45-60, test 3, soru 1-20...';
@@ -166,10 +198,23 @@ abstract class StringsTr {
   static const String denemeNumberEmpty = 'Boş';
   static const String pickDenemeNumber = 'Deneme numarası seç';
   static const String curriculumPickerHint =
-      'TYT / AYT Matematik · Ders › Ünite › Konu › Kazanım';
+      'LGS / TYT-AYT Matematik-Geometri / 9–11 Maarif · Ders › Ünite › Konu › Kazanım';
 
   // Ayarlar
   static const String settings = 'Ayarlar';
+  static const String profile = 'Profil';
+  static const String profileSubtitle = 'Ad, fotoğraf ve branşlar';
+  static const String login = 'Giriş yap';
+  static const String register = 'Kayıt ol';
+  static const String logout = 'Çıkış yap';
+  static const String email = 'E-posta';
+  static const String password = 'Şifre';
+  static const String forgotPassword = 'Şifremi unuttum';
+  static const String sendResetEmail = 'Sıfırlama maili gönder';
+  static const String newPassword = 'Yeni şifre';
+  static const String confirmPassword = 'Yeni şifre (tekrar)';
+  static const String saveNewPassword = 'Şifreyi kaydet';
+
   static const String notificationSettings = 'Bildirim Ayarları';
   static const String dailySummaryTime = 'Günlük Özet Saati';
   static const String weeklyScheduleSettings = 'Haftalık Ders Ayarları';

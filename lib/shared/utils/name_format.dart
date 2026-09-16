@@ -62,6 +62,43 @@ String _titleCaseTr(String word) {
   return '$first$rest';
 }
 
+/// Türkçe alfabe sırası: …ç, …ğ, ı, i, …ö, …ş, …ü…
+const _turkishAlphabet = [
+  'a', 'b', 'c', 'ç', 'd', 'e', 'f', 'g', 'ğ', 'h', 'ı', 'i', 'j', 'k', 'l',
+  'm', 'n', 'o', 'ö', 'p', 'r', 's', 'ş', 't', 'u', 'ü', 'v', 'y', 'z',
+];
+
+final Map<String, int> _turkishLetterOrder = {
+  for (var i = 0; i < _turkishAlphabet.length; i++) _turkishAlphabet[i]: i,
+};
+
+/// Türkçe karakterlere göre karşılaştırma (büyük/küçük duyarsız).
+int compareTurkish(String a, String b) {
+  final la = _toLowerTr(a.trim());
+  final lb = _toLowerTr(b.trim());
+  final ra = la.runes.toList();
+  final rb = lb.runes.toList();
+  final n = ra.length < rb.length ? ra.length : rb.length;
+
+  for (var i = 0; i < n; i++) {
+    final ca = String.fromCharCode(ra[i]);
+    final cb = String.fromCharCode(rb[i]);
+    final oa = _turkishLetterOrder[ca];
+    final ob = _turkishLetterOrder[cb];
+
+    if (oa != null && ob != null) {
+      final c = oa.compareTo(ob);
+      if (c != 0) return c;
+      continue;
+    }
+    if (oa != null) return -1;
+    if (ob != null) return 1;
+    final c = ca.compareTo(cb);
+    if (c != 0) return c;
+  }
+  return ra.length.compareTo(rb.length);
+}
+
 /// Ders konu / ödev / not metinleri için Türkçe yazım.
 /// Cümle başı büyük, devamı küçük (İ/ı kurallarına uygun).
 /// Nokta, soru, ünlem ve satır başından sonra yeni cümle büyük harfle başlar.

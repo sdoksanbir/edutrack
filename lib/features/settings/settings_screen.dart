@@ -2,8 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:ozel_ders_takip/app/router.dart';
+import 'package:ozel_ders_takip/data/providers/database_provider.dart';
 import 'package:ozel_ders_takip/data/providers/repositories_provider.dart';
+import 'package:ozel_ders_takip/features/auth/auth_providers.dart';
 import 'package:ozel_ders_takip/services/notification_service.dart';
+import 'package:ozel_ders_takip/services/supabase_client.dart';
 import 'package:ozel_ders_takip/shared/i18n/strings_tr.dart';
 import 'package:ozel_ders_takip/shared/theme/app_theme.dart';
 
@@ -118,6 +121,120 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         '${d.year}';
   }
 
+  Future<void> _syncStudents({required bool push}) async {
+    final cloud = ref.read(cloudSyncServiceProvider);
+    if (!cloud.canSync) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Önce bulut hesabına giriş yapın')),
+      );
+      return;
+    }
+    try {
+      final count =
+          push ? await cloud.pushAllStudents() : await cloud.pullAllStudents();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            push
+                ? '$count öğrenci buluta yedeklendi'
+                : '$count öğrenci buluttan çekildi',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Senkron hatası: $e')),
+      );
+    }
+  }
+
+  Future<void> _clearBusinessData() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Verileri temizle'),
+        content: const Text(
+          'Öğrenciler, ders programı, ödemeler, ödevler ve yapılacaklar '
+          'silinecek.\n\n'
+          'Profiliniz (ad, telefon, fotoğraf, branşlar) korunur.\n\n'
+          'Bu işlem geri alınamaz. Devam edilsin mi?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('İptal'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.danger,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Temizle'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final again = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Emin misiniz?'),
+        content: const Text(
+          'Tüm öğrenci ve ders verileri kalıcı olarak silinecek.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Vazgeç'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.danger,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Evet, sil'),
+          ),
+        ],
+      ),
+    );
+    if (again != true || !mounted) return;
+
+    try {
+      final db = ref.read(databaseProvider);
+      await db.clearBusinessData();
+      final cloud = ref.read(cloudSyncServiceProvider);
+      if (cloud.canSync) {
+        try {
+          await cloud.deleteAllRemoteStudents();
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Yerel temizlendi; bulut öğrencileri silinemedi: $e',
+                ),
+              ),
+            );
+          }
+          return;
+        }
+      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Veriler temizlendi')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Temizleme hatası: $e')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -146,6 +263,51 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
             ),
             const SizedBox(height: 20),
+            _SettingsTile(
+              icon: Icons.person_outline,
+              iconColor: AppColors.primary,
+              iconBg: AppColors.primarySoft,
+              title: StringsTr.profile,
+              subtitle: StringsTr.profileSubtitle,
+              onTap: () => context.push(AppRouter.profile),
+            ),
+            if (AppSupabase.isReady) ...[
+              const SizedBox(height: 12),
+              _SettingsTile(
+                icon: Icons.logout,
+                iconColor: AppColors.danger,
+                iconBg: AppColors.dangerSoft,
+                title: StringsTr.logout,
+                subtitle: ref.watch(currentUserProvider)?.email ?? 'Bulut oturumu',
+                onTap: () async {
+                  await AuthService.signOut();
+                  if (context.mounted) {
+                    context.go(AppRouter.login);
+                  }
+                },
+              ),
+              if (ref.watch(currentUserProvider) != null) ...[
+                const SizedBox(height: 12),
+                _SettingsTile(
+                  icon: Icons.cloud_upload_outlined,
+                  iconColor: AppColors.primary,
+                  iconBg: AppColors.primarySoft,
+                  title: 'Öğrencileri buluta yedekle',
+                  subtitle: 'Yerel öğrenci listesini Supabase’e yazar',
+                  onTap: () => _syncStudents(push: true),
+                ),
+                const SizedBox(height: 12),
+                _SettingsTile(
+                  icon: Icons.cloud_download_outlined,
+                  iconColor: AppColors.accent,
+                  iconBg: AppColors.accentSoft,
+                  title: 'Buluttan öğrencileri çek',
+                  subtitle: 'Aynı id varsa bulut satırı yereli ezer',
+                  onTap: () => _syncStudents(push: false),
+                ),
+              ],
+            ],
+            const SizedBox(height: 12),
             _SettingsTile(
               icon: Icons.notifications_outlined,
               iconColor: AppColors.primary,
@@ -227,6 +389,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               title: StringsTr.parameters,
               subtitle: StringsTr.parametersSubtitle,
               onTap: () => context.push(AppRouter.settingsParameters),
+            ),
+            const SizedBox(height: 12),
+            _SettingsTile(
+              icon: Icons.delete_forever_outlined,
+              iconColor: AppColors.danger,
+              iconBg: AppColors.dangerSoft,
+              title: 'Verileri temizle',
+              subtitle:
+                  'Öğrenci, program, ödeme, ödev — profil bilgileriniz kalır',
+              onTap: _clearBusinessData,
             ),
             const SizedBox(height: 12),
             _SettingsTile(

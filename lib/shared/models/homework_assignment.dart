@@ -121,8 +121,21 @@ String joinHomeworkResourceAssignments(List<HomeworkResourceAssignment> items) {
 
 List<HomeworkResourceAssignment> collectHomeworkResourceAssignments({
   required Map<String, List<HomeworkTopicEntry>> resourceTopics,
-  required Map<String, int?> denemeNumbers,
+  required Map<String, Set<int>> denemeSelections,
 }) {
+  final denemeItems = <HomeworkResourceAssignment>[];
+  for (final entry in denemeSelections.entries) {
+    final nos = entry.value.toList()..sort();
+    for (final no in nos) {
+      denemeItems.add(
+        HomeworkResourceAssignment(
+          resource: entry.key,
+          isPractice: true,
+          denemeNo: no,
+        ),
+      );
+    }
+  }
   return [
     ...resourceTopics.entries
         .where((e) => e.value.isNotEmpty)
@@ -132,15 +145,7 @@ List<HomeworkResourceAssignment> collectHomeworkResourceAssignments({
             topicEntries: e.value,
           ),
         ),
-    ...denemeNumbers.entries
-        .where((e) => e.value != null)
-        .map(
-          (e) => HomeworkResourceAssignment(
-            resource: e.key,
-            isPractice: true,
-            denemeNo: e.value,
-          ),
-        ),
+    ...denemeItems,
   ];
 }
 

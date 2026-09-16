@@ -54,6 +54,35 @@ class TodosRepository {
     );
   }
 
+  Future<bool> existsForHomeworkItem(String homeworkItemId) async {
+    final row = await (_db.select(_db.teacherTodos)
+          ..where((t) => t.homeworkItemId.equals(homeworkItemId))
+          ..limit(1))
+        .getSingleOrNull();
+    return row != null;
+  }
+
+  /// Ödev kaleminden ekler; aynı ödev zaten listedeyse `false` döner (çift ekleme yok).
+  Future<bool> addTodoFromHomework({
+    required String title,
+    required String homeworkItemId,
+    String? studentId,
+    String? studentName,
+    String? homeworkTopic,
+    DateTime? notifyAt,
+  }) async {
+    if (await existsForHomeworkItem(homeworkItemId)) return false;
+    await addTodo(
+      title: title,
+      studentId: studentId,
+      studentName: studentName,
+      homeworkItemId: homeworkItemId,
+      homeworkTopic: homeworkTopic,
+      notifyAt: notifyAt,
+    );
+    return true;
+  }
+
   Future<void> addTodo({
     required String title,
     String? studentId,

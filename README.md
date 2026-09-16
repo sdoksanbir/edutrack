@@ -112,6 +112,28 @@ flutter build appbundle --release
 
 ---
 
+## 5) Supabase (opsiyonel bulut)
+
+Yerel Drift veritabanı varsayılandır. Bulut için:
+
+1. [supabase.com](https://supabase.com) üzerinde proje oluşturun  
+2. **Settings → API** içinden `Project URL` ve `anon` / publishable key alın  
+3. Örnek dosya: `supabase.env.example`  
+4. Çalıştırırken:
+
+```bash
+flutter run --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co --dart-define=SUPABASE_ANON_KEY=YOUR_ANON_KEY
+```
+
+Key yoksa uygulama yine açılır (yerel mod). Client: `lib/services/supabase_client.dart`.
+
+Şema + RLS SQL: `supabase/migrations/001_edutrack_schema.sql`  
+Adımlar: `supabase/README.md`
+
+Supabase key ile çalıştırınca giriş ekranı açılır. Yerel modda (key yok) giriş atlanır.
+
+---
+
 ## Sık karşılaşılan sorunlar
 
 | Sorun | Çözüm |
@@ -131,7 +153,7 @@ lib/
   app/           # Router
   data/          # Veritabanı, repository’ler, provider’lar
   features/      # Ana sayfa, takvim, dersler, ödevler, ödemeler, öğrenciler
-  services/      # Bildirimler
+  services/      # Bildirimler, Supabase client
   shared/        # Tema, i18n, yardımcılar
 ```
 

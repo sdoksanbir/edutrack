@@ -179,6 +179,22 @@ class LessonsRepository {
     return query.watch();
   }
 
+  /// Yapılan derslerdeki anlatılan konular (benzersiz etiketler).
+  Stream<Set<String>> watchCompletedTaughtTopics(String studentId) {
+    return watchLessonsByStudent(studentId, status: 'done').map((lessons) {
+      final set = <String>{};
+      for (final lesson in lessons) {
+        final raw = lesson.topic?.trim();
+        if (raw == null || raw.isEmpty) continue;
+        for (final part in raw.split(RegExp(r'[\n·]'))) {
+          final t = part.trim();
+          if (t.isNotEmpty) set.add(t);
+        }
+      }
+      return set;
+    });
+  }
+
   /// SessionOccurrences'daki status='missed' kayıtlarını Lesson formatında döndürür (Dersler > Yapılmayan sekmesi için).
   Stream<List<Lesson>> watchMissedOccurrencesAsLessons(String studentId) {
     final query = _db.select(_db.sessionOccurrences)

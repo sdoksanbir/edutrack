@@ -14,6 +14,7 @@ class CurriculumRepository {
   Stream<List<CurriculumSubject>> watchSubjects() {
     return (_db.select(_db.curriculumSubjects)
           ..orderBy([
+            (t) => OrderingTerm.asc(t.folder),
             (t) => OrderingTerm.asc(t.sortOrder),
             (t) => OrderingTerm.asc(t.name),
           ]))
@@ -23,18 +24,32 @@ class CurriculumRepository {
   Future<List<CurriculumSubject>> getSubjects() {
     return (_db.select(_db.curriculumSubjects)
           ..orderBy([
+            (t) => OrderingTerm.asc(t.folder),
             (t) => OrderingTerm.asc(t.sortOrder),
             (t) => OrderingTerm.asc(t.name),
           ]))
         .get();
   }
 
-  Future<String> addSubject(String name) async {
+  /// Boş klasör alanını MATEMATİK yapar (çoklu branş klasörlerini bozmaz).
+  Future<void> ensureEmptyFoldersDefault() async {
+    await _db.customStatement(
+      "UPDATE curriculum_subjects SET folder = 'MATEMATİK' "
+      "WHERE folder IS NULL OR TRIM(folder) = ''",
+    );
+  }
+
+  @Deprecated('Use ensureEmptyFoldersDefault')
+  Future<void> ensureSubjectsUnderMatematikFolder() =>
+      ensureEmptyFoldersDefault();
+
+  Future<String> addSubject(String name, {String folder = 'MATEMATİK'}) async {
     final id = _uuid.v4();
     await _db.into(_db.curriculumSubjects).insert(
           CurriculumSubjectsCompanion.insert(
             id: id,
             name: name.trim(),
+            folder: Value(folder.trim().isEmpty ? 'MATEMATİK' : folder.trim()),
             createdAt: DateTime.now(),
           ),
         );
@@ -194,6 +209,9 @@ class CurriculumRepository {
         .go();
   }
 
-  /// TYT/AYT varsayılan müfredatı eksikse tamamlar.
-  Future<void> ensureDefaultCurriculum() => seedDefaultCurriculum(_db);
+  /// Varsayılan müfredatı (tüm branşlar) eksikse tamamlar.
+  Future<void> ensureDefaultCurriculum() async {
+    await ensureEmptyFoldersDefault();
+    await seedDefaultCurriculum(_db);
+  }
 }

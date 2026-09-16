@@ -9,11 +9,27 @@ import 'package:ozel_ders_takip/data/repositories/payments_repo.dart';
 import 'package:ozel_ders_takip/data/repositories/curriculum_repo.dart';
 import 'package:ozel_ders_takip/data/repositories/homework_repo.dart';
 import 'package:ozel_ders_takip/data/repositories/todos_repo.dart';
+import 'package:ozel_ders_takip/data/repositories/student_topic_progress_repo.dart';
 import 'package:ozel_ders_takip/data/local/app_database.dart';
+import 'package:ozel_ders_takip/services/cloud_sync_service.dart';
+import 'package:ozel_ders_takip/services/supabase_client.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+/// Supabase hazırsa client; değilse null (yerel Drift devam eder).
+final supabaseClientProvider = Provider<SupabaseClient?>((ref) {
+  return AppSupabase.isReady ? AppSupabase.client : null;
+});
+
+final cloudSyncServiceProvider = Provider<CloudSyncService>((ref) {
+  final db = ref.watch(databaseProvider);
+  final settings = ref.watch(appSettingsRepoProvider);
+  return CloudSyncService(db, settings);
+});
 
 final studentsRepoProvider = Provider<StudentsRepository>((ref) {
   final db = ref.watch(databaseProvider);
-  return StudentsRepository(db);
+  final cloud = ref.watch(cloudSyncServiceProvider);
+  return StudentsRepository(db, cloud);
 });
 
 final scheduleRepoProvider = Provider<ScheduleRepository>((ref) {
@@ -56,6 +72,11 @@ final todosRepoProvider = Provider<TodosRepository>((ref) {
   return TodosRepository(db);
 });
 
+final studentTopicProgressRepoProvider =
+    Provider<StudentTopicProgressRepository>((ref) {
+  final db = ref.watch(databaseProvider);
+  return StudentTopicProgressRepository(db);
+});
 
 final homeworkStudentSummariesProvider =
     StreamProvider<Map<String, StudentHomeworkSummary>>((ref) {
