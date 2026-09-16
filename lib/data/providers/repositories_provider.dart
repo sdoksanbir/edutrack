@@ -11,6 +11,7 @@ import 'package:ozel_ders_takip/data/repositories/homework_repo.dart';
 import 'package:ozel_ders_takip/data/repositories/todos_repo.dart';
 import 'package:ozel_ders_takip/data/repositories/student_topic_progress_repo.dart';
 import 'package:ozel_ders_takip/data/local/app_database.dart';
+import 'package:ozel_ders_takip/services/cloud_backup_scheduler.dart';
 import 'package:ozel_ders_takip/services/cloud_sync_service.dart';
 import 'package:ozel_ders_takip/services/supabase_client.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -24,6 +25,13 @@ final cloudSyncServiceProvider = Provider<CloudSyncService>((ref) {
   final db = ref.watch(databaseProvider);
   final settings = ref.watch(appSettingsRepoProvider);
   return CloudSyncService(db, settings);
+});
+
+final cloudBackupSchedulerProvider = Provider<CloudBackupScheduler>((ref) {
+  return CloudBackupScheduler(
+    ref.watch(cloudSyncServiceProvider),
+    ref.watch(appSettingsRepoProvider),
+  );
 });
 
 final studentsRepoProvider = Provider<StudentsRepository>((ref) {

@@ -127,8 +127,16 @@ flutter run --dart-define=SUPABASE_URL=https://YOUR_PROJECT.supabase.co --dart-d
 
 Key yoksa uygulama yine açılır (yerel mod). Client: `lib/services/supabase_client.dart`.
 
-Şema + RLS SQL: `supabase/migrations/001_edutrack_schema.sql`  
+Şema + RLS SQL (sırayla çalıştırın):
+
+- `supabase/migrations/001_edutrack_schema.sql`
+- `002_profile_phone.sql`
+- `003_student_grade_level.sql`
+- `004_full_backup_schema.sql` (ödev alanları + bitirilen konular)
+
 Adımlar: `supabase/README.md`
+
+Giriş yaptıktan sonra **Ayarlar → Bulut yedekleme** ile tüm veriyi (takvim, ödevler, konular, ödemeler vb.) yedekleyebilirsiniz. Varsayılan: her gün 22:00 (uygulama açıkken / açılışta zamanı gelmişse çalışır).
 
 Supabase key ile çalıştırınca giriş ekranı açılır. Yerel modda (key yok) giriş atlanır.
 

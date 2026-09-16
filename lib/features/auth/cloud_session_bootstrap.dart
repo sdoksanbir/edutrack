@@ -18,10 +18,15 @@ final cloudSessionBootstrapProvider = Provider<void>((ref) {
       final cloud = ref.read(cloudSyncServiceProvider);
       if (!cloud.canSync) return;
       try {
-        await cloud.pullProfile();
-        await cloud.pullAllStudents();
+        await cloud.pullAllData();
       } catch (e) {
         debugPrint('Oturum bootstrap sync: $e');
+        try {
+          await cloud.pullProfile();
+          await cloud.pullAllStudents();
+        } catch (e2) {
+          debugPrint('Oturum bootstrap fallback: $e2');
+        }
       }
     });
   });

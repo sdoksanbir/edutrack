@@ -202,4 +202,82 @@ class AppSettingsRepository {
     final normalized = DateTime(date.year, date.month, date.day);
     await setSetting('schedule_end_date', _formatDate(normalized));
   }
+
+  // ── Bulut yedekleme ────────────────────────────────────
+
+  /// Varsayılan: açık
+  Future<bool> getCloudBackupEnabled() async {
+    final v = await getSetting('cloud_backup_enabled');
+    if (v == null) return true;
+    return v == '1' || v.toLowerCase() == 'true';
+  }
+
+  Future<void> setCloudBackupEnabled(bool enabled) async {
+    await setSetting('cloud_backup_enabled', enabled ? '1' : '0');
+  }
+
+  /// HH:mm — varsayılan 22:00
+  Future<String> getCloudBackupTime() async {
+    return await getSetting('cloud_backup_time') ?? '22:00';
+  }
+
+  Future<void> setCloudBackupTime(String time) async {
+    await setSetting('cloud_backup_time', time);
+  }
+
+  /// Kaç günde bir (1 = her gün). Varsayılan 1.
+  Future<int> getCloudBackupIntervalDays() async {
+    final v = await getSetting('cloud_backup_interval_days');
+    final n = int.tryParse(v ?? '') ?? 1;
+    return n < 1 ? 1 : n;
+  }
+
+  Future<void> setCloudBackupIntervalDays(int days) async {
+    await setSetting('cloud_backup_interval_days', '${days < 1 ? 1 : days}');
+  }
+
+  Future<DateTime?> getCloudBackupLastAt() async {
+    final raw = await getSetting('cloud_backup_last_at');
+    if (raw == null || raw.isEmpty) return null;
+    return DateTime.tryParse(raw);
+  }
+
+  Future<void> setCloudBackupLastAt(DateTime at) async {
+    await setSetting('cloud_backup_last_at', at.toIso8601String());
+  }
+
+  /// Otomatik yedekleme zamanı geldi mi?
+  Future<bool> isCloudBackupDue([DateTime? now]) async {
+    if (!await getCloudBackupEnabled()) return false;
+    final nowLocal = now ?? DateTime.now();
+    final timeStr = await getCloudBackupTime();
+    final parts = timeStr.split(':');
+    final hour = int.tryParse(parts[0]) ?? 22;
+    final minute = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+    final interval = await getCloudBackupIntervalDays();
+    final lastAt = await getCloudBackupLastAt();
+
+    final todaySlot = DateTime(
+      nowLocal.year,
+      nowLocal.month,
+      nowLocal.day,
+      hour,
+      minute,
+    );
+
+    if (lastAt == null) {
+      return !nowLocal.isBefore(todaySlot);
+    }
+
+    final lastDay = DateTime(lastAt.year, lastAt.month, lastAt.day);
+    final nextDay = lastDay.add(Duration(days: interval));
+    final nextSlot = DateTime(
+      nextDay.year,
+      nextDay.month,
+      nextDay.day,
+      hour,
+      minute,
+    );
+    return !nowLocal.isBefore(nextSlot);
+  }
 }

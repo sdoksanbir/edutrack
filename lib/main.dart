@@ -5,6 +5,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:ozel_ders_takip/app/router.dart';
+import 'package:ozel_ders_takip/data/providers/repositories_provider.dart';
 import 'package:ozel_ders_takip/data/local/app_database.dart';
 import 'package:ozel_ders_takip/data/repositories/app_settings_repo.dart';
 import 'package:ozel_ders_takip/data/repositories/schedule_repo.dart';
@@ -294,6 +295,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _startNotificationCheck();
+    // İlk açılışta zamanı gelmiş yedekleme
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _runScheduledBackupIfDue();
+    });
   }
 
   @override
@@ -308,6 +313,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     if (state == AppLifecycleState.resumed) {
       _checkUpcomingNotifications();
       _startNotificationCheck();
+      _runScheduledBackupIfDue();
     } else if (state == AppLifecycleState.paused) {
       _notificationCheckTimer?.cancel();
     }
@@ -317,7 +323,16 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
     _notificationCheckTimer?.cancel();
     _notificationCheckTimer = Timer.periodic(const Duration(minutes: 1), (_) {
       _checkUpcomingNotifications();
+      _runScheduledBackupIfDue();
     });
+  }
+
+  Future<void> _runScheduledBackupIfDue() async {
+    try {
+      await ref.read(cloudBackupSchedulerProvider).runIfDue();
+    } catch (e) {
+      debugPrint('Yedekleme zamanlayıcı: $e');
+    }
   }
 
   Future<void> _checkUpcomingNotifications() async {

@@ -21,6 +21,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   TimeOfDay? _dailySummaryTime;
   DateTime? _defaultScheduleEndDate;
   bool _isLoading = true;
+  bool _backupEnabled = true;
+  bool _backupExpanded = false;
+  TimeOfDay _backupTime = const TimeOfDay(hour: 22, minute: 0);
+  int _backupIntervalDays = 1;
+  DateTime? _backupLastAt;
+  bool _backupRunning = false;
+
+  static const _intervalOptions = <int>[1, 2, 3, 7];
 
   @override
   void initState() {
@@ -45,11 +53,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       }
 
       final defaultEndDate = await settingsRepo.getDefaultScheduleEndDate();
+      final backupEnabled = await settingsRepo.getCloudBackupEnabled();
+      final backupTimeStr = await settingsRepo.getCloudBackupTime();
+      final btParts = backupTimeStr.split(':');
+      final backupTime = TimeOfDay(
+        hour: int.tryParse(btParts[0]) ?? 22,
+        minute: btParts.length > 1 ? (int.tryParse(btParts[1]) ?? 0) : 0,
+      );
+      final backupInterval = await settingsRepo.getCloudBackupIntervalDays();
+      final backupLast = await settingsRepo.getCloudBackupLastAt();
 
       if (mounted) {
         setState(() {
           _dailySummaryTime = dailySummaryTime;
           _defaultScheduleEndDate = defaultEndDate;
+          _backupEnabled = backupEnabled;
+          _backupTime = backupTime;
+          _backupIntervalDays = backupInterval;
+          _backupLastAt = backupLast;
           _isLoading = false;
         });
       }
@@ -62,6 +83,139 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  String _fmtTime(TimeOfDay t) =>
+      '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+
+  String get _backupIntervalLabel {
+    switch (_backupIntervalDays) {
+      case 1:
+        return 'Her gün';
+      case 2:
+        return '2 günde bir';
+      case 3:
+        return '3 günde bir';
+      case 7:
+        return 'Haftada bir';
+      default:
+        return '$_backupIntervalDays günde bir';
+    }
+  }
+
+  String get _backupLastLabel {
+    final d = _backupLastAt;
+    if (d == null) return 'Henüz yedeklenmedi';
+    return '${d.day.toString().padLeft(2, '0')}.'
+        '${d.month.toString().padLeft(2, '0')}.'
+        '${d.year} '
+        '${d.hour.toString().padLeft(2, '0')}:'
+        '${d.minute.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _saveBackupEnabled(bool enabled) async {
+    final settingsRepo = ref.read(appSettingsRepoProvider);
+    await settingsRepo.setCloudBackupEnabled(enabled);
+    setState(() => _backupEnabled = enabled);
+  }
+
+  Future<void> _pickBackupTime() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: _backupTime,
+    );
+    if (picked == null || !mounted) return;
+    final settingsRepo = ref.read(appSettingsRepoProvider);
+    await settingsRepo.setCloudBackupTime(_fmtTime(picked));
+    setState(() => _backupTime = picked);
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Yedekleme saati: ${_fmtTime(picked)}'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _pickBackupInterval() async {
+    final picked = await showModalBottomSheet<int>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ListTile(
+              title: Text(
+                'Yedekleme aralığı',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            for (final d in _intervalOptions)
+              ListTile(
+                title: Text(
+                  d == 1
+                      ? 'Her gün'
+                      : d == 7
+                          ? 'Haftada bir'
+                          : '$d günde bir',
+                ),
+                trailing: d == _backupIntervalDays
+                    ? const Icon(Icons.check, color: AppColors.primary)
+                    : null,
+                onTap: () => Navigator.pop(ctx, d),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || !mounted) return;
+    final settingsRepo = ref.read(appSettingsRepoProvider);
+    await settingsRepo.setCloudBackupIntervalDays(picked);
+    setState(() => _backupIntervalDays = picked);
+  }
+
+  Future<void> _runFullBackup({required bool push}) async {
+    final cloud = ref.read(cloudSyncServiceProvider);
+    if (!cloud.canSync) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Önce bulut hesabına giriş yapın')),
+      );
+      return;
+    }
+    if (_backupRunning || cloud.isBusy) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Yedekleme zaten sürüyor')),
+      );
+      return;
+    }
+    setState(() => _backupRunning = true);
+    try {
+      final result =
+          push ? await cloud.pushAllData() : await cloud.pullAllData();
+      final last = await ref.read(appSettingsRepoProvider).getCloudBackupLastAt();
+      if (!mounted) return;
+      setState(() {
+        _backupLastAt = last;
+        _backupRunning = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            push
+                ? 'Buluta yedeklendi · ${result.totalRows} kayıt'
+                : 'Buluttan çekildi · ${result.totalRows} kayıt',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _backupRunning = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Senkron hatası: $e')),
+      );
     }
   }
 
@@ -119,36 +273,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return '${d.day.toString().padLeft(2, '0')}.'
         '${d.month.toString().padLeft(2, '0')}.'
         '${d.year}';
-  }
-
-  Future<void> _syncStudents({required bool push}) async {
-    final cloud = ref.read(cloudSyncServiceProvider);
-    if (!cloud.canSync) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Önce bulut hesabına giriş yapın')),
-      );
-      return;
-    }
-    try {
-      final count =
-          push ? await cloud.pushAllStudents() : await cloud.pullAllStudents();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            push
-                ? '$count öğrenci buluta yedeklendi'
-                : '$count öğrenci buluttan çekildi',
-          ),
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Senkron hatası: $e')),
-      );
-    }
   }
 
   Future<void> _clearBusinessData() async {
@@ -209,7 +333,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final cloud = ref.read(cloudSyncServiceProvider);
       if (cloud.canSync) {
         try {
-          await cloud.deleteAllRemoteStudents();
+          await cloud.deleteAllRemoteData();
         } catch (e) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -288,28 +412,150 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ),
               if (ref.watch(currentUserProvider) != null) ...[
                 const SizedBox(height: 12),
-                _SettingsTile(
-                  icon: Icons.cloud_upload_outlined,
-                  iconColor: AppColors.primary,
-                  iconBg: AppColors.primarySoft,
-                  title: 'Öğrencileri buluta yedekle',
-                  subtitle: 'Yerel öğrenci listesini Supabase’e yazar',
-                  onTap: () => _syncStudents(push: true),
-                ),
-                const SizedBox(height: 12),
-                _SettingsTile(
-                  icon: Icons.cloud_download_outlined,
-                  iconColor: AppColors.accent,
-                  iconBg: AppColors.accentSoft,
-                  title: 'Buluttan öğrencileri çek',
-                  subtitle: 'Aynı id varsa bulut satırı yereli ezer',
-                  onTap: () => _syncStudents(push: false),
-                ),
+                Material(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        InkWell(
+                          onTap: () => setState(
+                            () => _backupExpanded = !_backupExpanded,
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          child: Row(
+                            children: [
+                              const AccentIconBox(
+                                icon: Icons.cloud_sync_outlined,
+                                color: AppColors.primary,
+                                background: AppColors.primarySoft,
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Bulut yedekleme',
+                                      style: TextStyle(
+                                        color: AppColors.textPrimary,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _backupExpanded
+                                          ? 'Takvim, ödevler, konular, ödemeler…'
+                                          : '$_backupIntervalLabel · ${_fmtTime(_backupTime)} · Son: $_backupLastLabel',
+                                      style: const TextStyle(
+                                        color: AppColors.muted,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                _backupExpanded
+                                    ? Icons.expand_less
+                                    : Icons.expand_more,
+                                color: AppColors.muted,
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (_backupExpanded) ...[
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                const Expanded(
+                                  child: Text(
+                                    'Otomatik yedekleme',
+                                    style: TextStyle(
+                                      color: AppColors.textPrimary,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                                Switch(
+                                  value: _backupEnabled,
+                                  onChanged: (v) => _saveBackupEnabled(v),
+                                ),
+                              ],
+                            ),
+                            if (_backupEnabled) ...[
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                dense: true,
+                                title: const Text('Yedekleme saati'),
+                                subtitle: Text(_fmtTime(_backupTime)),
+                                trailing:
+                                    const Icon(Icons.schedule, size: 20),
+                                onTap: _pickBackupTime,
+                              ),
+                              ListTile(
+                                contentPadding: EdgeInsets.zero,
+                                dense: true,
+                                title: const Text('Aralık'),
+                                subtitle: Text(_backupIntervalLabel),
+                                trailing:
+                                    const Icon(Icons.repeat, size: 20),
+                                onTap: _pickBackupInterval,
+                              ),
+                            ],
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: _backupRunning
+                                        ? null
+                                        : () => _runFullBackup(push: true),
+                                    icon: _backupRunning
+                                        ? const SizedBox(
+                                            width: 16,
+                                            height: 16,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                            ),
+                                          )
+                                        : const Icon(
+                                            Icons.cloud_upload_outlined,
+                                          ),
+                                    label: const Text('Şimdi yedekle'),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: _backupRunning
+                                        ? null
+                                        : () => _runFullBackup(push: false),
+                                    icon: const Icon(
+                                      Icons.cloud_download_outlined,
+                                    ),
+                                    label: const Text('Buluttan çek'),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ],
-            ],
-            const SizedBox(height: 12),
-            _SettingsTile(
-              icon: Icons.notifications_outlined,
+              const SizedBox(height: 12),
+              _SettingsTile(
+                icon: Icons.notifications_outlined,
               iconColor: AppColors.primary,
               iconBg: AppColors.primarySoft,
               title: 'Günlük Özet Saati',
@@ -399,15 +645,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               subtitle:
                   'Öğrenci, program, ödeme, ödev — profil bilgileriniz kalır',
               onTap: _clearBusinessData,
-            ),
-            const SizedBox(height: 12),
-            _SettingsTile(
-              icon: Icons.info_outline,
-              iconColor: AppColors.success,
-              iconBg: AppColors.successSoft,
-              title: 'Uygulama',
-              subtitle: 'Özel Ders Takip · Yerel veri',
-              onTap: null,
             ),
           ],
         ),
