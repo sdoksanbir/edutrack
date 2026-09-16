@@ -1,35 +1,142 @@
-# ozel_ders_takip
+# EduTrack — Özel Ders Takip
 
-Özel Ders Takip Uygulaması
+Özel derslerinizi, öğrencileri, takvimi, ödevleri ve ödemeleri tek yerden yöneten Flutter uygulaması.
 
-## Veritabanı Schema Güncellemeleri
+Depo: [github.com/sdoksanbir/edutrack](https://github.com/sdoksanbir/edutrack)
 
-**ÖNEMLİ:** Veritabanı şeması değiştiğinde (tables.dart veya app_database.dart güncellendiğinde) aşağıdaki komutu çalıştırın:
+---
+
+## Gereksinimler
+
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) (önerilen: **3.24+**, Dart **3.10+**)
+- Windows için: [Visual Studio](https://visualstudio.microsoft.com/) (Desktop development with C++) veya Android Studio / cihaz
+- Android için: Android Studio + SDK
+- Git (klonlamak için)
+
+Kurulumdan sonra kontrol:
 
 ```bash
-flutter pub run build_runner build --delete-conflicting-outputs
+flutter doctor
 ```
 
-Bu komut `app_database.g.dart` dosyasını yeniden oluşturur ve veritabanı migration'larını uygular.
+---
 
-## Son Yapılan Değişiklikler
+## 1) Projeyi indirme
 
-- SessionOccurrences tablosu eklendi (planlanan derslerin gerçekleşme durumu)
-- Lessons tablosuna occurrenceId alanı eklendi
-- Planlanan dersler ile gerçekleşen ders kayıtları ayrıldı
-- Takvim ekranında "Yapıldı" / "Yapılmadı" seçenekleri eklendi
-- Öğrenci detay ekranına "Geçmiş Dersler" bölümü eklendi
-- Dersler ekranı "Yapılmayan Dersler" raporuna dönüştürüldü
+### Seçenek A — Git ile klonlama (önerilen)
 
-## Getting Started
+```bash
+git clone https://github.com/sdoksanbir/edutrack.git
+cd edutrack
+```
 
-This project is a starting point for a Flutter application.
+### Seçenek B — ZIP olarak indirme
 
-A few resources to get you started if this is your first Flutter project:
+1. [Depo sayfasına](https://github.com/sdoksanbir/edutrack) gidin  
+2. **Code → Download ZIP**  
+3. ZIP’i açın ve klasöre girin  
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+---
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## 2) Bağımlılıkları kurma
+
+Proje klasöründe:
+
+```bash
+flutter pub get
+```
+
+Veritabanı kod üretimi (Drift) gerekirse:
+
+```bash
+dart run build_runner build --delete-conflicting-outputs
+```
+
+> Şema değiştiğinde (`lib/data/local/tables.dart` veya `app_database.dart`) bu komutu yeniden çalıştırın.
+
+---
+
+## 3) Uygulamayı çalıştırma
+
+Bağlı cihaz / emülatör listesi:
+
+```bash
+flutter devices
+```
+
+### Windows masaüstü
+
+```bash
+flutter run -d windows
+```
+
+### Android
+
+```bash
+flutter run -d android
+```
+
+### Belirli bir cihaz
+
+```bash
+flutter run -d <cihaz_id>
+```
+
+İlk derleme biraz sürebilir. Hot reload için terminalde `r`, hot restart için `R`.
+
+---
+
+## 4) Derleme (isteğe bağlı)
+
+### Windows release
+
+```bash
+flutter build windows
+```
+
+Çıktı: `build/windows/x64/runner/Release/`
+
+### Android APK
+
+```bash
+flutter build apk --release
+```
+
+Çıktı: `build/app/outputs/flutter-apk/app-release.apk`
+
+### Android App Bundle (Play Store)
+
+```bash
+flutter build appbundle --release
+```
+
+---
+
+## Sık karşılaşılan sorunlar
+
+| Sorun | Çözüm |
+|--------|--------|
+| `flutter` komutu bulunamadı | Flutter’ı PATH’e ekleyin, terminali yeniden açın |
+| Bağımlılık / paket hatası | `flutter clean` sonra `flutter pub get` |
+| Drift / veritabanı hatası | `dart run build_runner build --delete-conflicting-outputs` |
+| Windows derleme hatası | Visual Studio’da “Desktop development with C++” yüklü olmalı |
+| Android lisans uyarısı | `flutter doctor --android-licenses` |
+
+---
+
+## Proje yapısı (kısa)
+
+```
+lib/
+  app/           # Router
+  data/          # Veritabanı, repository’ler, provider’lar
+  features/      # Ana sayfa, takvim, dersler, ödevler, ödemeler, öğrenciler
+  services/      # Bildirimler
+  shared/        # Tema, i18n, yardımcılar
+```
+
+---
+
+## Lisans
+
+Özel proje — [sdoksanbir/edutrack](https://github.com/sdoksanbir/edutrack).
