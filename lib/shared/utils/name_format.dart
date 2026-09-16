@@ -1,3 +1,5 @@
+import 'package:flutter/services.dart';
+
 /// Türkçe ad-soyad biçimlendirme.
 /// Ad(lar): İlk harf büyük, kalanı küçük (örn. Ahmet, Mehmet).
 /// Soyad: Tüm harfler büyük (örn. YILMAZ).
@@ -20,6 +22,59 @@ String formatPersonFullName(String input) {
       .join(' ');
   final surname = _toUpperTr(parts.last);
   return '$givenNames $surname';
+}
+
+/// Yazarken anlık ad-soyad biçimi (sondaki boşluk korunur — imleç bozulmasın).
+/// Son kelime soyad (BÜYÜK); önceki kelimeler Ad.
+String formatPersonFullNameLive(String input) {
+  if (input.isEmpty) return input;
+
+  final hasTrailingSpace = RegExp(r'\s$').hasMatch(input);
+  final core = input.replaceFirst(RegExp(r'\s+$'), '');
+  final parts = core
+      .split(RegExp(r'\s+'))
+      .where((p) => p.isNotEmpty)
+      .toList();
+
+  if (parts.isEmpty) {
+    return hasTrailingSpace ? ' ' : '';
+  }
+
+  final String formatted;
+  if (parts.length == 1) {
+    formatted = _titleCaseTr(parts.first);
+  } else {
+    final givenNames =
+        parts.sublist(0, parts.length - 1).map(_titleCaseTr).join(' ');
+    final surname = _toUpperTr(parts.last);
+    formatted = '$givenNames $surname';
+  }
+
+  return hasTrailingSpace ? '$formatted ' : formatted;
+}
+
+/// [TextField] / [TextFormField] için canlı ad-soyad biçimleyici.
+class PersonFullNameInputFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final formatted = formatPersonFullNameLive(newValue.text);
+    if (formatted == newValue.text) return newValue;
+
+    // Uzunluk aynı kaldığında (sadece büyük/küçük) imleci koru;
+    // değişirse sonda tut.
+    final selectionIndex = formatted.length == newValue.text.length
+        ? newValue.selection.baseOffset.clamp(0, formatted.length)
+        : formatted.length;
+
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: selectionIndex),
+      composing: TextRange.empty,
+    );
+  }
 }
 
 String _toLowerTr(String s) {

@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:ozel_ders_takip/data/local/app_database.dart';
 import 'package:ozel_ders_takip/shared/models/teacher_profile.dart';
+import 'package:ozel_ders_takip/shared/utils/name_format.dart';
 import 'package:ozel_ders_takip/shared/utils/phone_format.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -73,7 +74,7 @@ class AppSettingsRepository {
     String? photoPath,
     bool clearPhoto = false,
   }) async {
-    await setSetting(_kTeacherName, fullName.trim());
+    await setSetting(_kTeacherName, formatPersonFullName(fullName));
     await setSetting(
       _kTeacherPhone,
       formatTurkishPhone(phone) ?? '',

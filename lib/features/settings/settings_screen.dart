@@ -646,6 +646,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   'Öğrenci, program, ödeme, ödev — profil bilgileriniz kalır',
               onTap: _clearBusinessData,
             ),
+            const SizedBox(height: 20),
+            Text(
+              AppSupabase.isReady
+                  ? 'Sürüm 1.1.3 (6) · Bulut hazır'
+                  : 'Sürüm 1.1.3 (6) · Bulut kapalı',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: AppColors.muted,
+                fontSize: 12,
+              ),
+            ),
           ],
         ),
       ),

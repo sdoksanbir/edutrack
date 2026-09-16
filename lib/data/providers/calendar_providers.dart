@@ -8,8 +8,7 @@ import 'package:ozel_ders_takip/data/local/app_database.dart';
 /// Kurallar:
 /// - TEK VERİ KAYNAĞI: SessionOccurrences (watchLessonsByDateRange içinde)
 /// - Parametre: DateTimeRange (ayın ilk günü ve son günü)
-/// - Stream açılmadan önce aralık dışı planned temizlenir ve geçerli
-///   pencerede eksikler üretilir (yeşil flaş olmasın).
+/// - Stream açılmadan önce aralık ensure edilir (2 dk önbellekli prune/upsert)
 /// - Drift watchQuery ile SessionOccurrences değişikliklerini otomatik yakalar.
 final calendarLessonsProvider =
     StreamProvider.family<Map<DateTime, List<Lesson>>, DateTimeRange>(
@@ -18,9 +17,7 @@ final calendarLessonsProvider =
     final scheduleRepo = ref.watch(scheduleRepoProvider);
 
     return Stream.fromFuture(() async {
-      // Önce eski fazla kayıtları düş (bitiş tarihi sonrası yeşiller)
-      await scheduleRepo.prunePlannedOutsideActiveTemplateWindows();
-      await scheduleRepo.upsertOccurrencesForRange(
+      await scheduleRepo.ensureOccurrencesForRange(
         startDate: dateRange.start,
         endDate: dateRange.end,
       );

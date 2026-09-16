@@ -183,6 +183,27 @@ class CurriculumRepository {
         .get();
   }
 
+  /// Ünitedeki tüm konuların kazanımlarını tek sorguda getirir (N+1 yok).
+  Future<Map<String, List<CurriculumOutcome>>> getOutcomesByTopicIds(
+    List<String> topicIds,
+  ) async {
+    if (topicIds.isEmpty) return {};
+    final rows = await (_db.select(_db.curriculumOutcomes)
+          ..where((t) => t.topicId.isIn(topicIds))
+          ..orderBy([
+            (t) => OrderingTerm.asc(t.sortOrder),
+            (t) => OrderingTerm.asc(t.name),
+          ]))
+        .get();
+    final map = <String, List<CurriculumOutcome>>{
+      for (final id in topicIds) id: <CurriculumOutcome>[],
+    };
+    for (final row in rows) {
+      map.putIfAbsent(row.topicId, () => <CurriculumOutcome>[]).add(row);
+    }
+    return map;
+  }
+
   Future<String> addOutcome({
     required String topicId,
     required String name,
@@ -209,9 +230,41 @@ class CurriculumRepository {
         .go();
   }
 
-  /// Varsayılan müfredatı (tüm branşlar) eksikse tamamlar.
+  /// Varsayılan müfredatı eksikse tamamlar (zaten doluysa anında çıkar).
   Future<void> ensureDefaultCurriculum() async {
     await ensureEmptyFoldersDefault();
+
+    final flag = await (_db.select(_db.appSettings)
+          ..where((s) => s.key.equals('curriculum_seed_v2')))
+        .getSingleOrNull();
+    if (flag?.value == '1') return;
+
+    final subjects = await getSubjects();
+    // Buluttan çekilmiş / daha önce doldurulmuş müfredat
+    if (subjects.length >= 12) {
+      await _markCurriculumSeeded();
+      return;
+    }
+
     await seedDefaultCurriculum(_db);
+    await _markCurriculumSeeded();
+  }
+
+  Future<void> _markCurriculumSeeded() async {
+    final existing = await (_db.select(_db.appSettings)
+          ..where((s) => s.key.equals('curriculum_seed_v2')))
+        .getSingleOrNull();
+    if (existing != null) {
+      await (_db.update(_db.appSettings)
+            ..where((s) => s.key.equals('curriculum_seed_v2')))
+          .write(const AppSettingsCompanion(value: Value('1')));
+    } else {
+      await _db.into(_db.appSettings).insert(
+            AppSettingsCompanion.insert(
+              key: 'curriculum_seed_v2',
+              value: '1',
+            ),
+          );
+    }
   }
 }

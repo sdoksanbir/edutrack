@@ -32,8 +32,7 @@ final todayLessonsProvider =
   final lessonsRepo = ref.watch(lessonsRepoProvider);
   final studentsRepo = ref.watch(studentsRepoProvider);
 
-  await scheduleRepo.prunePlannedOutsideActiveTemplateWindows();
-  await scheduleRepo.upsertOccurrencesForRange(
+  await scheduleRepo.ensureOccurrencesForRange(
     startDate: today,
     endDate: today,
   );

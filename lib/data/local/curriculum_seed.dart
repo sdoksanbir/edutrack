@@ -34,14 +34,15 @@ Future<void> seedDefaultCurriculum(AppDatabase db) async {
       .replaceAll('ı', 'i')
       .replaceAll('İ', 'i');
 
+  var subjectCache = await db.select(db.curriculumSubjects).get();
+
   Future<String> ensureSubject(
     String name,
     int order, {
     String folder = 'MATEMATİK',
   }) async {
     final target = normalize(name);
-    final all = await db.select(db.curriculumSubjects).get();
-    for (final s in all) {
+    for (final s in subjectCache) {
       if (normalize(s.name) == target) {
         if (s.folder != folder || s.sortOrder != order) {
           await (db.update(db.curriculumSubjects)
@@ -56,7 +57,17 @@ Future<void> seedDefaultCurriculum(AppDatabase db) async {
         return s.id;
       }
     }
-    return insertSubject(name, order, folder: folder);
+    final id = await insertSubject(name, order, folder: folder);
+    subjectCache.add(
+      CurriculumSubject(
+        id: id,
+        name: name,
+        folder: folder,
+        sortOrder: order,
+        createdAt: now,
+      ),
+    );
+    return id;
   }
 
   Future<int> unitCount(String subjectId) async {

@@ -43,8 +43,35 @@ class ScheduleRepository {
   final _notificationService = NotificationService();
   final HomeworkRepository _homeworkRepo;
 
+  /// ensureOccurrencesForRange önbelleği (aynı aralık kısa sürede tekrar prune/upsert olmasın).
+  final Map<String, DateTime> _ensureCache = {};
+  static const _ensureTtl = Duration(minutes: 2);
+
   ScheduleRepository(this._db, [HomeworkRepository? homeworkRepo])
       : _homeworkRepo = homeworkRepo ?? HomeworkRepository(_db);
+
+  /// Şablon / program değişince çağır — sonraki ensure yeniden çalışır.
+  void clearOccurrenceEnsureCache() => _ensureCache.clear();
+
+  /// Home / takvim: gerekirse prune + upsert; yakın zamanda yapıldıysa atlar.
+  Future<void> ensureOccurrencesForRange({
+    required DateTime startDate,
+    required DateTime endDate,
+    bool force = false,
+  }) async {
+    final start = DateTime(startDate.year, startDate.month, startDate.day);
+    final end = DateTime(endDate.year, endDate.month, endDate.day);
+    final key = '${_formatDate(start)}|${_formatDate(end)}';
+    final cached = _ensureCache[key];
+    if (!force &&
+        cached != null &&
+        DateTime.now().difference(cached) < _ensureTtl) {
+      return;
+    }
+    await prunePlannedOutsideActiveTemplateWindows();
+    await upsertOccurrencesForRange(startDate: start, endDate: end);
+    _ensureCache[key] = DateTime.now();
+  }
 
   /// Ortak tarih formatı: 'YYYY-MM-DD'
   String _formatDate(DateTime date) {
@@ -355,6 +382,7 @@ class ScheduleRepository {
     required String startDate, // 'YYYY-MM-DD' formatında
     String? endDate, // 'YYYY-MM-DD' — null ise NULL yazılır
   }) async {
+    clearOccurrenceEnsureCache();
     final existing = await (_db.select(_db.scheduleTemplates)
           ..where(
             (t) =>
@@ -619,6 +647,7 @@ class ScheduleRepository {
   /// Şablon siler: önce pasifleştirir, planlananları temizler;
   /// yapılmış/kaçırılmış yoksa satırı tamamen siler.
   Future<void> deleteTemplate(String id) async {
+    clearOccurrenceEnsureCache();
     await (_db
             .update(_db.scheduleTemplates)
               ..where((t) => t.id.equals(id)))
@@ -642,6 +671,7 @@ class ScheduleRepository {
   /// Şablonu ve bağlı planlanan ders / override kayıtlarını kalıcı siler.
   /// done/missed occurrence'ların templateId'si null yapılır (geçmiş korunur).
   Future<void> hardDeleteTemplate(String templateId) async {
+    clearOccurrenceEnsureCache();
     // Planlananları sil
     final planned = await (_db.select(_db.sessionOccurrences)
           ..where(
@@ -1015,66 +1045,8 @@ class ScheduleRepository {
       // Saate göre sırala
       result.sort((a, b) => a.startTime.compareTo(b.startTime));
 
-      // Bildirimleri planla (status == 'planned' olanlar için)
-      await _scheduleRemindersForItems(result, date);
-
       return result;
     });
-  }
-
-  /// Effective schedule item'ları için bildirimleri planlar
-  Future<void> _scheduleRemindersForItems(
-    List<EffectiveScheduleItem> items,
-    DateTime date,
-  ) async {
-    print('📅 _scheduleRemindersForItems çağrıldı: Tarih=$date, Ders sayısı=${items.length}');
-    
-    for (final item in items) {
-      print('   Ders: ${item.studentName}, Saat: ${item.startTime}, Status: ${item.status ?? "null"}');
-      
-      // Sadece planned status için bildirim kur
-      if (item.status == 'planned' || item.status == null) {
-        final timeParts = item.startTime.split(':');
-        final startTime = TimeOfDay(
-          hour: int.parse(timeParts[0]),
-          minute: int.parse(timeParts[1]),
-        );
-
-        // Ders zamanını hesapla
-        final lessonDateTime = DateTime(
-          date.year,
-          date.month,
-          date.day,
-          startTime.hour,
-          startTime.minute,
-        );
-        
-        // Eğer ders zamanı geçmişse bildirim kurma
-        if (lessonDateTime.isBefore(DateTime.now())) {
-          print('   ⏭️ Ders zamanı geçmiş, bildirim kurulmadı: $lessonDateTime');
-          continue;
-        }
-
-        print('   ✅ Bildirim kuruluyor: ${item.studentName} - $lessonDateTime');
-        await _notificationService.scheduleLessonReminder(
-          templateId: item.templateId,
-          date: date,
-          startTime: startTime,
-          studentName: item.studentName,
-          reminderMinutes: 10, // Varsayılan 10 dakika
-        );
-      } else if (item.status == 'done' || item.status == 'not_done') {
-        // Yapıldı/yapılmadı olanlar için bildirimi iptal et
-        final dateStr = _formatDate(date);
-        print('   ❌ Ders yapıldı/yapılmadı, bildirim iptal ediliyor: ${item.studentName}');
-        await _notificationService.cancelLessonReminder(
-          item.templateId,
-          dateStr,
-        );
-      }
-    }
-    
-    print('📅 _scheduleRemindersForItems tamamlandı');
   }
 
   /// Belirli bir tarih için effective schedule hesaplar
@@ -1112,6 +1084,17 @@ class ScheduleRepository {
         if (occurrence.templateId != null) occurrence.templateId!: occurrence
     };
 
+    // Aktif öğrencileri tek sorguda al (N+1 yok)
+    final studentIds = templates.map((t) => t.studentId).toSet().toList();
+    final students = studentIds.isEmpty
+        ? <Student>[]
+        : await (_db.select(_db.students)
+              ..where(
+                (s) => s.id.isIn(studentIds) & s.isActive.equals(true),
+              ))
+            .get();
+    final studentMap = {for (final s in students) s.id: s};
+
     final result = <EffectiveScheduleItem>[];
 
     for (final template in templates) {
@@ -1147,11 +1130,7 @@ class ScheduleRepository {
       // Occurrence bilgisini al
       final occurrence = occurrenceMap[template.id];
 
-      // Öğrenci bilgisini al (pasif öğrencileri atla)
-      final student = await (_db.select(_db.students)
-            ..where((s) =>
-                s.id.equals(template.studentId) & s.isActive.equals(true)))
-          .getSingleOrNull();
+      final student = studentMap[template.studentId];
 
       if (student != null) {
         result.add(EffectiveScheduleItem(
@@ -1172,9 +1151,6 @@ class ScheduleRepository {
 
     // Saate göre sırala
     result.sort((a, b) => a.startTime.compareTo(b.startTime));
-
-    // Bildirimleri planla (status == 'planned' olanlar için)
-    await _scheduleRemindersForItems(result, dateOnly);
 
     return result;
   }
@@ -2245,6 +2221,14 @@ class ScheduleRepository {
         }
       }
     });
+
+    // Tam aralık upsert → ensure önbelleğini güncelle
+    if (templateId == null) {
+      _ensureCache['${_formatDate(rangeStart)}|${_formatDate(rangeEnd)}'] =
+          DateTime.now();
+    } else {
+      clearOccurrenceEnsureCache();
+    }
   }
 
   /// İptal edilen dersleri stream olarak izler (status='missed')

@@ -6,6 +6,7 @@ import 'package:ozel_ders_takip/features/auth/auth_providers.dart';
 import 'package:ozel_ders_takip/services/supabase_client.dart';
 import 'package:ozel_ders_takip/shared/i18n/strings_tr.dart';
 import 'package:ozel_ders_takip/shared/theme/app_theme.dart';
+import 'package:ozel_ders_takip/shared/utils/name_format.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -82,7 +83,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           final res = await AuthService.signUp(
             email: _emailCtrl.text,
             password: _passwordCtrl.text,
-            fullName: _nameCtrl.text,
+            fullName: formatPersonFullName(_nameCtrl.text),
           );
           if (res.session == null && mounted) {
             setState(() {
@@ -278,8 +279,10 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         TextFormField(
                           controller: _nameCtrl,
                           textCapitalization: TextCapitalization.words,
+                          inputFormatters: [PersonFullNameInputFormatter()],
                           decoration: const InputDecoration(
                             labelText: 'Ad Soyad',
+                            hintText: 'Örn. Ayşe YILMAZ',
                             prefixIcon: Icon(Icons.badge_outlined),
                           ),
                         ),

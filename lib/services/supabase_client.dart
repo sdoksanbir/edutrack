@@ -1,44 +1,43 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-/// Supabase bağlantısı (bulut senkron / Auth / Storage için altyapı).
+/// Supabase bağlantısı (bulut senkron / Auth / Storage).
 ///
-/// Anahtarlar `--dart-define` ile verilir; yoksa uygulama yerel Drift ile
-/// çalışmaya devam eder (`isReady == false`).
-///
-/// Örnek:
-/// ```bash
-/// flutter run --dart-define=SUPABASE_URL=https://xxx.supabase.co \
-///   --dart-define=SUPABASE_ANON_KEY=eyJ...
-/// ```
+/// Öncelik: `--dart-define=SUPABASE_URL` / `SUPABASE_ANON_KEY`.
+/// Tanımlı değilse aşağıdaki varsayılanlar kullanılır (anon key + RLS).
 class AppSupabase {
   AppSupabase._();
 
   static bool _initialized = false;
 
-  /// Supabase başarıyla initialize edildi mi?
+  /// Proje URL / anon key (release APK için varsayılan gömülü).
+  static const String defaultUrl =
+      'https://qixzimjcidvbcacgxglp.supabase.co';
+  static const String defaultAnonKey =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFpeHppbWpjaWR2YmNhY2d4Z2xwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk1ODExMDgsImV4cCI6MjEwNTE1NzEwOH0.iwYsp0FEuoU1AOtiOgWIGHjya92Q5fkXFUdwSvLZ8ko';
+
   static bool get isReady => _initialized;
 
   static SupabaseClient get client {
     if (!_initialized) {
       throw StateError(
-        'Supabase henüz hazır değil. SUPABASE_URL / SUPABASE_ANON_KEY '
-        'tanımlayın veya isReady kontrolü yapın.',
+        'Supabase henüz hazır değil. isReady kontrolü yapın.',
       );
     }
     return Supabase.instance.client;
   }
 
-  /// Key’ler varsa initialize eder; yoksa sessizce atlar (yerel mod).
+  /// Key’ler varsa initialize eder.
   static Future<bool> init() async {
-    const url = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
-    const anonKey =
+    const urlFromEnv = String.fromEnvironment('SUPABASE_URL', defaultValue: '');
+    const keyFromEnv =
         String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: '');
 
+    final url = urlFromEnv.isNotEmpty ? urlFromEnv : defaultUrl;
+    final anonKey = keyFromEnv.isNotEmpty ? keyFromEnv : defaultAnonKey;
+
     if (url.isEmpty || anonKey.isEmpty) {
-      debugPrint(
-        'Supabase: SUPABASE_URL / SUPABASE_ANON_KEY yok — yerel Drift modu.',
-      );
+      debugPrint('Supabase: URL/key yok — yerel Drift modu.');
       _initialized = false;
       return false;
     }
@@ -51,7 +50,7 @@ class AppSupabase {
       ),
     );
     _initialized = true;
-    debugPrint('Supabase: bağlantı hazır.');
+    debugPrint('Supabase: bağlantı hazır ($url).');
     return true;
   }
 }

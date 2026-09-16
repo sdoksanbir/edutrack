@@ -81,8 +81,14 @@ class AppDatabase extends _$AppDatabase {
         await seedDefaultCurriculum(this);
       },
       beforeOpen: (details) async {
-        // Şema zaten güncel ama müfredat boşsa (eski v14) doldur.
-        await seedDefaultCurriculum(this);
+        // Sadece müfredat tamamen boşsa doldur (her açılışta seed YOK).
+        final row = await customSelect(
+          'SELECT COUNT(*) AS c FROM curriculum_subjects',
+        ).getSingle();
+        final count = row.read<int>('c');
+        if (count == 0) {
+          await seedDefaultCurriculum(this);
+        }
       },
       onUpgrade: (Migrator m, int from, int to) async {
         if (from < 2) {
@@ -443,6 +449,6 @@ LazyDatabase _openConnection(String? userId) {
       }
     }
 
-    return NativeDatabase(target);
+    return NativeDatabase.createInBackground(target);
   });
 }

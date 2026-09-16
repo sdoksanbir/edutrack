@@ -75,7 +75,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     profile ??= await ref.read(appSettingsRepoProvider).getTeacherProfile();
     if (!mounted) return;
     setState(() {
-      _nameCtrl.text = profile!.fullName;
+      _nameCtrl.text = formatPersonFullName(profile!.fullName);
       final p = profile.phone;
       _phoneCtrl.text =
           (p == null || p.isEmpty) ? '' : formatTurkishPhoneDisplay(p);
@@ -138,7 +138,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 onTap: () async {
                   Navigator.pop(ctx);
                   await ref.read(appSettingsRepoProvider).saveTeacherProfile(
-                        fullName: _nameCtrl.text,
+                        fullName: formatPersonFullName(_nameCtrl.text),
                         phone: _phoneCtrl.text,
                         branches: _branches.toList(),
                         visibleFolders: _visible.toList(),
@@ -168,7 +168,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Future<void> _save() async {
     setState(() => _saving = true);
     try {
-      final name = formatTurkishText(_nameCtrl.text);
+      final name = formatPersonFullName(_nameCtrl.text);
+      _nameCtrl.text = name;
       final phone = formatTurkishPhone(_phoneCtrl.text);
       final branches = CurriculumFolders.all
           .where((f) => _branches.contains(f))
@@ -393,9 +394,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 TextField(
                   controller: _nameCtrl,
                   textCapitalization: TextCapitalization.words,
+                  inputFormatters: [PersonFullNameInputFormatter()],
                   decoration: const InputDecoration(
                     labelText: 'Ad Soyad',
-                    hintText: 'Örn. Ayşe Yılmaz',
+                    hintText: 'Örn. Ayşe YILMAZ',
                     prefixIcon: Icon(Icons.badge_outlined),
                   ),
                 ),

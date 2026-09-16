@@ -1588,8 +1588,13 @@ class _CurriculumTopicBrowserState
   }
 
   Future<void> _loadSubjects() async {
-    await ref.read(curriculumRepoProvider).ensureDefaultCurriculum();
-    final list = await ref.read(curriculumRepoProvider).getSubjects();
+    final repo = ref.read(curriculumRepoProvider);
+    var list = await repo.getSubjects();
+    // Müfredat yoksa bir kez doldur; doluysa seed'e hiç girme
+    if (list.isEmpty) {
+      await repo.ensureDefaultCurriculum();
+      list = await repo.getSubjects();
+    }
     if (!mounted) return;
     setState(() {
       _subjects = list
@@ -1619,11 +1624,11 @@ class _CurriculumTopicBrowserState
   }
 
   Future<void> _selectUnit(CurriculumUnit u) async {
-    final topics = await ref.read(curriculumRepoProvider).getTopics(u.id);
-    final map = <String, List<CurriculumOutcome>>{};
-    for (final t in topics) {
-      map[t.id] = await ref.read(curriculumRepoProvider).getOutcomes(t.id);
-    }
+    final repo = ref.read(curriculumRepoProvider);
+    final topics = await repo.getTopics(u.id);
+    final map = await repo.getOutcomesByTopicIds(
+      topics.map((t) => t.id).toList(),
+    );
     if (!mounted) return;
     setState(() {
       _unit = u;

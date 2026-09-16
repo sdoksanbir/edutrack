@@ -49,7 +49,9 @@ class _StudentFormSheetState extends ConsumerState<_StudentFormSheet> {
   void initState() {
     super.initState();
     final s = widget.student;
-    _nameCtrl = TextEditingController(text: s?.fullName ?? '');
+    _nameCtrl = TextEditingController(
+      text: s == null ? '' : formatPersonFullName(s.fullName),
+    );
     _phoneCtrl = TextEditingController(
       text: (s?.phone == null || s!.phone!.isEmpty)
           ? ''
@@ -59,8 +61,11 @@ class _StudentFormSheetState extends ConsumerState<_StudentFormSheet> {
       text: s == null ? '' : s.hourlyRate.toString(),
     );
     _notesCtrl = TextEditingController(text: s?.notes ?? '');
-    _guardianNameCtrl =
-        TextEditingController(text: s?.guardianFullName ?? '');
+    _guardianNameCtrl = TextEditingController(
+      text: (s?.guardianFullName == null || s!.guardianFullName!.isEmpty)
+          ? ''
+          : formatPersonFullName(s.guardianFullName!),
+    );
     _guardianPhoneCtrl = TextEditingController(
       text: (s?.guardianPhone == null || s!.guardianPhone!.isEmpty)
           ? ''
@@ -271,6 +276,7 @@ class _StudentFormSheetState extends ConsumerState<_StudentFormSheet> {
                       autofocus: !_isEdit,
                       textCapitalization: TextCapitalization.words,
                       textInputAction: TextInputAction.next,
+                      inputFormatters: [PersonFullNameInputFormatter()],
                       decoration: _dec(
                         label: 'Ad Soyad *',
                         hint: 'Örn. Ahmet Mehmet YILMAZ',
@@ -353,6 +359,7 @@ class _StudentFormSheetState extends ConsumerState<_StudentFormSheet> {
                       controller: _guardianNameCtrl,
                       textCapitalization: TextCapitalization.words,
                       textInputAction: TextInputAction.next,
+                      inputFormatters: [PersonFullNameInputFormatter()],
                       decoration: _dec(
                         label: 'Veli Ad Soyad',
                         hint: 'Örn. Ayşe YILMAZ',

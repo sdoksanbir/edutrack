@@ -288,14 +288,15 @@ class MyApp extends ConsumerStatefulWidget {
 
 class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   Timer? _notificationCheckTimer;
+  Timer? _backupCheckTimer;
   final _notificationService = NotificationService();
+  bool _notificationCheckRunning = false;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _startNotificationCheck();
-    // İlk açılışta zamanı gelmiş yedekleme
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _runScheduledBackupIfDue();
     });
@@ -305,6 +306,7 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _notificationCheckTimer?.cancel();
+    _backupCheckTimer?.cancel();
     super.dispose();
   }
 
@@ -316,13 +318,19 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
       _runScheduledBackupIfDue();
     } else if (state == AppLifecycleState.paused) {
       _notificationCheckTimer?.cancel();
+      _backupCheckTimer?.cancel();
     }
   }
 
   void _startNotificationCheck() {
     _notificationCheckTimer?.cancel();
-    _notificationCheckTimer = Timer.periodic(const Duration(minutes: 1), (_) {
+    _backupCheckTimer?.cancel();
+    // Bildirim: 5 dakikada bir (paylaşılan DB)
+    _notificationCheckTimer = Timer.periodic(const Duration(minutes: 5), (_) {
       _checkUpcomingNotifications();
+    });
+    // Yedek: 15 dakikada bir due kontrolü (ucuz; push sadece due ise)
+    _backupCheckTimer = Timer.periodic(const Duration(minutes: 15), (_) {
       _runScheduledBackupIfDue();
     });
   }
@@ -336,9 +344,10 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
   }
 
   Future<void> _checkUpcomingNotifications() async {
+    if (_notificationCheckRunning) return;
+    _notificationCheckRunning = true;
     try {
-      final db = AppDatabase(userId: _currentDbUserId);
-      final scheduleRepo = ScheduleRepository(db);
+      final scheduleRepo = ref.read(scheduleRepoProvider);
       final now = DateTime.now();
 
       final pendingNotifications =
@@ -379,8 +388,6 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
               final isPending =
                   pendingNotifications.any((n) => n.id == notificationId);
               if (isPending) {
-                print(
-                    '🔄 Bildirim zamanı geçti, manuel olarak gösteriliyor: ${lesson.studentName} - ${lesson.startTime}');
                 await _notificationService.triggerNotificationManually(
                   notificationId: notificationId,
                   title: 'Ders Hatırlatması',
@@ -393,7 +400,9 @@ class _MyAppState extends ConsumerState<MyApp> with WidgetsBindingObserver {
         }
       }
     } catch (e) {
-      print('⚠️ Yaklaşan bildirimler kontrol edilirken hata: $e');
+      debugPrint('Yaklaşan bildirimler kontrol hatası: $e');
+    } finally {
+      _notificationCheckRunning = false;
     }
   }
 
